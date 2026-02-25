@@ -68,7 +68,7 @@ describe("agent registry", () => {
     expect(agent.name).toBe("test-echo");
     expect(agent.model).toBe("claude-sonnet-4-20250514");
     expect(agent.prompt).toBe("You are a test agent. Echo back whatever the user says.");
-    expect(agent.tools).toEqual(["shell"]);
+    expect(agent.tools).toEqual(["shell", "filesystem"]);
     expect(agent.triggers).toEqual(["manual"]);
 
     // 5. Duplicate add should fail

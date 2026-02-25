@@ -4,6 +4,7 @@ import { loadConfig } from "./config.ts";
 import { getDb } from "./state.ts";
 import { createAgent, getAgent, listAgents, removeAgent } from "./agents.ts";
 import { registerServer, listTools, callTool, disconnectAll } from "./tools/registry.ts";
+import { listRuns, getRun } from "./traces.ts";
 import { filesystemServerConfig } from "./tools/builtin/filesystem.ts";
 
 const startTime = Date.now();
@@ -62,6 +63,24 @@ app.post("/agents/:name/run", async (c) => {
     const msg = err instanceof Error ? err.message : String(err);
     if (msg.includes("not found")) return c.json({ error: msg }, 404);
     if (msg.includes("API key")) return c.json({ error: msg }, 500);
+    return c.json({ error: msg }, 500);
+  }
+});
+
+app.get("/agents/:name/runs", (c) => {
+  const name = c.req.param("name");
+  const limit = Number(c.req.query("limit")) || 20;
+  return c.json(listRuns(name, limit));
+});
+
+app.get("/runs/:id", (c) => {
+  try {
+    const run = getRun(c.req.param("id"));
+    if (!run) return c.json({ error: "Run not found" }, 404);
+    return c.json(run);
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg.includes("Ambiguous")) return c.json({ error: msg }, 400);
     return c.json({ error: msg }, 500);
   }
 });

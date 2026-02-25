@@ -3,14 +3,17 @@ import { loadApiKey } from "./config.ts";
 import { getAgent } from "./agents.ts";
 import { listTools, callTool } from "./tools/registry.ts";
 import type { RegisteredTool } from "./tools/registry.ts";
+import { createRun, completeRun, failRun, logEvent, costForModel } from "./traces.ts";
 
 export interface RunResult {
+  runId: string;
   agentName: string;
   output: string;
   toolCalls: number;
   startedAt: string;
   completedAt: string;
   durationMs: number;
+  costUsd: number;
 }
 
 export function toAnthropicName(name: string): string {
@@ -68,93 +71,143 @@ export async function runAgent(agentName: string, context?: string): Promise<Run
 
   const startedAt = new Date().toISOString();
   const start = Date.now();
+  const runId = createRun(agentName);
   let totalToolCalls = 0;
+  let totalInputTokens = 0;
+  let totalOutputTokens = 0;
   let output = "";
 
-  for (let i = 0; i < MAX_ITERATIONS; i++) {
-    console.log(`[runner] LLM call ${i + 1} for agent "${agentName}"`);
+  try {
+    for (let i = 0; i < MAX_ITERATIONS; i++) {
+      const llmStart = Date.now();
 
-    const response = await client.messages.create({
-      model: agent.model,
-      max_tokens: 4096,
-      system: agent.prompt,
-      messages,
-      tools: anthropicTools.length > 0 ? anthropicTools : undefined,
-    });
+      const response = await client.messages.create({
+        model: agent.model,
+        max_tokens: 4096,
+        system: agent.prompt,
+        messages,
+        tools: anthropicTools.length > 0 ? anthropicTools : undefined,
+      });
 
-    if (response.stop_reason === "end_turn" || response.stop_reason === "max_tokens") {
-      // Extract text blocks as final output
-      const textParts = response.content
-        .filter((b): b is Anthropic.TextBlock => b.type === "text")
-        .map((b) => b.text);
-      output = textParts.join("\n");
-      if (response.stop_reason === "max_tokens") {
-        output += "\n[warning: response truncated due to max_tokens]";
+      totalInputTokens += response.usage.input_tokens;
+      totalOutputTokens += response.usage.output_tokens;
+
+      logEvent(runId, "llm_call", {
+        model: agent.model,
+        input_tokens: response.usage.input_tokens,
+        output_tokens: response.usage.output_tokens,
+        stop_reason: response.stop_reason,
+        duration_ms: Date.now() - llmStart,
+      });
+
+      if (response.stop_reason === "end_turn" || response.stop_reason === "max_tokens") {
+        const textParts = response.content
+          .filter((b): b is Anthropic.TextBlock => b.type === "text")
+          .map((b) => b.text);
+        output = textParts.join("\n");
+        if (response.stop_reason === "max_tokens") {
+          output += "\n[warning: response truncated due to max_tokens]";
+        }
+        break;
       }
-      break;
-    }
 
-    if (response.stop_reason === "tool_use") {
-      // Append assistant message
-      messages.push({ role: "assistant", content: response.content });
+      if (response.stop_reason === "tool_use") {
+        messages.push({ role: "assistant", content: response.content });
 
-      // Process tool calls
-      const toolResults: Anthropic.ToolResultBlockParam[] = [];
-      for (const block of response.content) {
-        if (block.type !== "tool_use") continue;
+        const toolResults: Anthropic.ToolResultBlockParam[] = [];
+        for (const block of response.content) {
+          if (block.type !== "tool_use") continue;
 
-        totalToolCalls++;
-        const originalName = fromAnthropicName(block.name);
-        console.log(`[runner] Tool call: ${originalName}`);
+          totalToolCalls++;
+          const originalName = fromAnthropicName(block.name);
+          const toolStart = Date.now();
 
-        try {
-          const result = await callTool(originalName, block.input as Record<string, unknown>);
-          const mcpResult = result as { content?: unknown[]; isError?: boolean };
+          try {
+            const result = await callTool(originalName, block.input as Record<string, unknown>);
+            const mcpResult = result as { content?: unknown[]; isError?: boolean };
 
-          if (mcpResult.isError) {
+            logEvent(runId, "tool_call", {
+              tool: originalName,
+              args: block.input,
+              result_preview: JSON.stringify(mcpResult.content).slice(0, 200),
+              is_error: Boolean(mcpResult.isError),
+              duration_ms: Date.now() - toolStart,
+            });
+
+            if (mcpResult.isError) {
+              toolResults.push({
+                type: "tool_result",
+                tool_use_id: block.id,
+                is_error: true,
+                content: JSON.stringify(mcpResult.content),
+              });
+            } else {
+              toolResults.push({
+                type: "tool_result",
+                tool_use_id: block.id,
+                content: JSON.stringify(mcpResult.content),
+              });
+            }
+          } catch (err: unknown) {
+            const msg = err instanceof Error ? err.message : String(err);
+
+            logEvent(runId, "tool_call", {
+              tool: originalName,
+              args: block.input,
+              result_preview: msg.slice(0, 200),
+              is_error: true,
+              duration_ms: Date.now() - toolStart,
+            });
+
             toolResults.push({
               type: "tool_result",
               tool_use_id: block.id,
               is_error: true,
-              content: JSON.stringify(mcpResult.content),
-            });
-          } else {
-            toolResults.push({
-              type: "tool_result",
-              tool_use_id: block.id,
-              content: JSON.stringify(mcpResult.content),
+              content: msg,
             });
           }
-        } catch (err: unknown) {
-          const msg = err instanceof Error ? err.message : String(err);
-          toolResults.push({
-            type: "tool_result",
-            tool_use_id: block.id,
-            is_error: true,
-            content: msg,
-          });
         }
+
+        messages.push({ role: "user", content: toolResults });
+        continue;
       }
-
-      messages.push({ role: "user", content: toolResults });
-      continue;
     }
+
+    if (!output) {
+      output = "[warning: agent reached maximum iteration limit (20) without producing a final response]";
+    }
+
+    const durationMs = Date.now() - start;
+    const costUsd = costForModel(agent.model, totalInputTokens, totalOutputTokens);
+    const completedAt = new Date().toISOString();
+
+    completeRun(runId, {
+      output,
+      totalInputTokens,
+      totalOutputTokens,
+      costUsd,
+      toolCalls: totalToolCalls,
+      durationMs,
+    });
+
+    return {
+      runId,
+      agentName,
+      output,
+      toolCalls: totalToolCalls,
+      startedAt,
+      completedAt,
+      durationMs,
+      costUsd,
+    };
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    const stack = err instanceof Error ? err.stack : undefined;
+    const durationMs = Date.now() - start;
+
+    logEvent(runId, "error", { message: msg, stack });
+    failRun(runId, { error: msg, durationMs });
+
+    throw err;
   }
-
-  if (!output) {
-    output = "[warning: agent reached maximum iteration limit (20) without producing a final response]";
-  }
-
-  const completedAt = new Date().toISOString();
-
-  console.log(`[runner] Agent "${agentName}" completed with ${totalToolCalls} tool calls`);
-
-  return {
-    agentName,
-    output,
-    toolCalls: totalToolCalls,
-    startedAt,
-    completedAt,
-    durationMs: Date.now() - start,
-  };
 }

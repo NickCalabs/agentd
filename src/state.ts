@@ -39,6 +39,31 @@ export function getDb(): InstanceType<typeof DatabaseConstructor> {
       PRIMARY KEY (agent_name, key),
       FOREIGN KEY (agent_name) REFERENCES agents(name) ON DELETE CASCADE
     );
+
+    CREATE TABLE IF NOT EXISTS runs (
+      id                  TEXT PRIMARY KEY,
+      agent_name          TEXT NOT NULL,
+      status              TEXT NOT NULL DEFAULT 'running',
+      started_at          TEXT NOT NULL,
+      completed_at        TEXT,
+      duration_ms         INTEGER,
+      total_input_tokens  INTEGER DEFAULT 0,
+      total_output_tokens INTEGER DEFAULT 0,
+      cost_usd            REAL DEFAULT 0,
+      tool_calls          INTEGER DEFAULT 0,
+      output              TEXT,
+      error               TEXT,
+      FOREIGN KEY (agent_name) REFERENCES agents(name) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS events (
+      id        INTEGER PRIMARY KEY AUTOINCREMENT,
+      run_id    TEXT NOT NULL,
+      type      TEXT NOT NULL,
+      timestamp TEXT NOT NULL,
+      data      TEXT,
+      FOREIGN KEY (run_id) REFERENCES runs(id) ON DELETE CASCADE
+    );
   `);
 
   return db;

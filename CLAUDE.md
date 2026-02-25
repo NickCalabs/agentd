@@ -25,9 +25,16 @@ src/config.ts — YAML config loader
 src/state.ts  — SQLite database (better-sqlite3)
 src/agents.ts — Agent CRUD operations
 src/runner.ts — Agent execution loop (Anthropic API + tool calls)
+src/traces.ts — Run tracing and cost tracking
 src/tools/registry.ts  — Tool registry (namespaced tools from MCP servers)
 src/tools/mcp-client.ts — MCP client wrapper (stdio transport)
 src/tools/builtin/filesystem.ts — Built-in filesystem MCP server config
+
+## Schema
+- agents — Agent definitions
+- state — Agent key-value state
+- runs — Agent execution runs (traces, token counts, cost)
+- events — Per-run events (llm_call, tool_call, error)
 
 ## Rules
 - No classes unless necessary. Prefer plain functions and objects.
