@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "test-fs": {
+      "command": "node",
+      "args": ["node_modules/@modelcontextprotocol/server-filesystem/dist/index.js", "/tmp"]
+    }
+  }
+}

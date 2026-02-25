@@ -4,6 +4,7 @@ import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 export interface McpClientOptions {
   command: string;
   args: string[];
+  env?: Record<string, string>;
   timeoutMs?: number;
 }
 
@@ -28,6 +29,7 @@ export async function createMcpClient(options: McpClientOptions): Promise<McpCli
   const transport = new StdioClientTransport({
     command: options.command,
     args: options.args,
+    env: options.env ? { ...process.env, ...options.env } as Record<string, string> : undefined,
   });
 
   const client = new Client({ name: "agentd", version: "0.1.0" });

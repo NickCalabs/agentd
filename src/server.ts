@@ -6,6 +6,7 @@ import { createAgent, getAgent, listAgents, removeAgent } from "./agents.ts";
 import { registerServer, listTools, callTool, disconnectAll } from "./tools/registry.ts";
 import { listRuns, getRun } from "./traces.ts";
 import { filesystemServerConfig } from "./tools/builtin/filesystem.ts";
+import { discoverMcpServers } from "./tools/discovery.ts";
 import { initScheduler, stopScheduler, scheduleAgent, unscheduleAgent } from "./scheduler.ts";
 
 const startTime = Date.now();
@@ -111,12 +112,14 @@ export { app };
 async function initTools(): Promise<void> {
   try {
     const config = filesystemServerConfig();
-    await registerServer("filesystem", config);
-    console.log("Registered MCP server: filesystem");
+    await registerServer("filesystem", config, "built-in");
+    console.log("Registered MCP server: filesystem (source: built-in)");
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     console.warn(`Warning: failed to register filesystem MCP server: ${msg}`);
   }
+
+  await discoverMcpServers();
 }
 
 export async function startServer(): Promise<void> {

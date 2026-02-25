@@ -74,7 +74,7 @@ describe("tool registry", () => {
     // 3. GET /tools — verify filesystem tools exist
     const toolsRes = await fetch(`${BASE_URL}/tools`);
     expect(toolsRes.status).toBe(200);
-    const tools = (await toolsRes.json()) as { name: string; serverName: string }[];
+    const tools = (await toolsRes.json()) as { name: string; serverName: string; source: string }[];
     expect(tools.length).toBeGreaterThan(0);
     expect(tools.every((t) => t.name.startsWith("filesystem."))).toBe(true);
     expect(tools.some((t) => t.name === "filesystem.list_directory")).toBe(true);

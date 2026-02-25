@@ -7,11 +7,13 @@ export interface RegisteredTool {
   originalName: string;
   description?: string;
   inputSchema?: Record<string, unknown>;
+  source: string;
 }
 
 interface ServerEntry {
   client: McpClient;
   tools: Map<string, RegisteredTool>;
+  source: string;
 }
 
 const servers = new Map<string, ServerEntry>();
@@ -19,7 +21,19 @@ const servers = new Map<string, ServerEntry>();
 export async function registerServer(
   name: string,
   config: McpClientOptions,
+  source = "manual",
+  opts?: { replace?: boolean },
 ): Promise<RegisteredTool[]> {
+  const existing = servers.get(name);
+  if (existing) {
+    if (opts?.replace) {
+      await existing.client.disconnect().catch(() => {});
+    } else {
+      console.warn(`MCP server "${name}" already registered (source: ${existing.source}), skipping`);
+      return [...existing.tools.values()];
+    }
+  }
+
   const client = await createMcpClient(config);
   const rawTools = await client.listTools();
 
@@ -32,10 +46,11 @@ export async function registerServer(
       originalName: t.name,
       description: t.description,
       inputSchema: t.inputSchema,
+      source,
     });
   }
 
-  servers.set(name, { client, tools });
+  servers.set(name, { client, tools, source });
   return [...tools.values()];
 }
 
