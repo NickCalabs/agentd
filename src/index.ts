@@ -183,6 +183,20 @@ function formatDuration(ms: number): string {
   return `${(ms / 1000).toFixed(1)}s`;
 }
 
+function formatNextRun(iso: string | null): string {
+  if (!iso) return "-";
+  const diff = new Date(iso).getTime() - Date.now();
+  if (diff <= 0) return "now";
+  const sec = Math.floor(diff / 1000);
+  if (sec < 60) return `in ${sec}s`;
+  const min = Math.floor(sec / 60);
+  if (min < 60) return `in ${min}m`;
+  const hr = Math.floor(min / 60);
+  if (hr < 24) return `in ${hr}h`;
+  const days = Math.floor(hr / 24);
+  return `in ${days}d`;
+}
+
 function stripModelDate(model: string): string {
   return model.replace(/-\d{8}$/, "");
 }
@@ -207,14 +221,15 @@ agents
   .action(async () => {
     try {
       const res = await fetch(`${BASE_URL}/agents`);
-      const data = (await res.json()) as { name: string; model: string; description: string | null }[];
+      const data = (await res.json()) as { name: string; model: string; description: string | null; next_run: string | null }[];
       if (data.length === 0) {
         console.log("No agents registered.");
         return;
       }
-      console.log("Name\tModel\tDescription");
+      console.log("Name\tModel\tNext Run\tDescription");
       for (const a of data) {
-        console.log(`${a.name}\t${a.model}\t${a.description ?? ""}`);
+        const nextRun = formatNextRun(a.next_run);
+        console.log(`${a.name}\t${a.model}\t${nextRun}\t${a.description ?? ""}`);
       }
     } catch {
       console.error("Failed to reach daemon. Is the daemon running?");

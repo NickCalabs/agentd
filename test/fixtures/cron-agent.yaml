@@ -1,0 +1,7 @@
+name: cron-test-agent
+model: claude-sonnet-4-20250514
+description: Agent with cron trigger for testing
+prompt: You are a scheduled test agent.
+triggers:
+  - manual
+  - "cron:*/5 * * * *"

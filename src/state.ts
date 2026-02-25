@@ -66,5 +66,11 @@ export function getDb(): InstanceType<typeof DatabaseConstructor> {
     );
   `);
 
+  // Migrations
+  const columns = db.pragma("table_info(agents)") as { name: string }[];
+  if (!columns.some((c) => c.name === "next_run")) {
+    db.exec("ALTER TABLE agents ADD COLUMN next_run TEXT");
+  }
+
   return db;
 }

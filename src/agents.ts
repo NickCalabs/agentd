@@ -1,6 +1,11 @@
+import { createRequire } from "node:module";
 import { readFileSync } from "node:fs";
 import { parse as parseYaml } from "yaml";
 import { getDb } from "./state.ts";
+
+const require = createRequire(import.meta.url);
+const nodeCron = require("node-cron") as typeof import("node-cron");
+const cronParser = require("cron-parser") as typeof import("cron-parser");
 
 export interface Agent {
   name: string;
@@ -9,6 +14,7 @@ export interface Agent {
   prompt: string;
   tools: string[];
   triggers: string[];
+  next_run: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -20,6 +26,7 @@ interface AgentRow {
   prompt: string;
   tools: string;
   triggers: string;
+  next_run: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -29,6 +36,7 @@ function rowToAgent(row: AgentRow): Agent {
     ...row,
     tools: JSON.parse(row.tools),
     triggers: JSON.parse(row.triggers),
+    next_run: row.next_run ?? null,
   };
 }
 
@@ -90,12 +98,49 @@ export function createAgent(yamlPath: string): Agent {
   const tools = validateStringArray(doc.tools, "tools");
   const triggers = validateStringArray(doc.triggers, "triggers");
 
+  // Validate trigger format
+  for (const trigger of triggers) {
+    if (trigger === "manual") continue;
+    if (trigger.startsWith("cron:")) {
+      const expr = trigger.slice(5);
+      if (!expr.trim()) {
+        throw new Error(`Empty cron expression in trigger "${trigger}"`);
+      }
+      if (!nodeCron.validate(expr)) {
+        throw new Error(`Invalid cron expression in trigger "${trigger}"`);
+      }
+      // Also verify cron-parser can compute next run
+      try {
+        cronParser.CronExpressionParser.parse(expr);
+      } catch {
+        throw new Error(`Invalid cron expression in trigger "${trigger}"`);
+      }
+      continue;
+    }
+    const prefix = trigger.split(":")[0];
+    throw new Error(`Unknown trigger type "${prefix}" in trigger "${trigger}". Supported types: manual, cron`);
+  }
+
+  // Compute next_run from cron triggers
+  let nextRun: string | null = null;
+  const cronExprs = triggers.filter((t) => t.startsWith("cron:")).map((t) => t.slice(5));
+  if (cronExprs.length > 0) {
+    const now = new Date();
+    let earliest: Date | null = null;
+    for (const expr of cronExprs) {
+      const parsed = cronParser.CronExpressionParser.parse(expr);
+      const next = parsed.next().toDate();
+      if (!earliest || next < earliest) earliest = next;
+    }
+    if (earliest) nextRun = earliest.toISOString();
+  }
+
   const now = new Date().toISOString();
   const db = getDb();
 
   const stmt = db.prepare(`
-    INSERT INTO agents (name, description, model, prompt, tools, triggers, created_at, updated_at)
-    VALUES (@name, @description, @model, @prompt, @tools, @triggers, @created_at, @updated_at)
+    INSERT INTO agents (name, description, model, prompt, tools, triggers, next_run, created_at, updated_at)
+    VALUES (@name, @description, @model, @prompt, @tools, @triggers, @next_run, @created_at, @updated_at)
   `);
 
   const desc = (description as string) ?? null;
@@ -107,6 +152,7 @@ export function createAgent(yamlPath: string): Agent {
     prompt,
     tools: JSON.stringify(tools),
     triggers: JSON.stringify(triggers),
+    next_run: nextRun,
     created_at: now,
     updated_at: now,
   });
@@ -118,6 +164,7 @@ export function createAgent(yamlPath: string): Agent {
     prompt: prompt as string,
     tools,
     triggers,
+    next_run: nextRun,
     created_at: now,
     updated_at: now,
   };

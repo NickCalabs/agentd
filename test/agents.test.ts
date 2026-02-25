@@ -50,8 +50,10 @@ describe("agent registry", () => {
     run("start");
     expect(await waitForHealthy()).toBe(true);
 
-    // Clean up any leftover test agent from prior runs
+    // Clean up any leftover agents from prior runs
     await fetch(`http://${DEFAULT_HOST}:${DEFAULT_PORT}/agents/test-echo`, { method: "DELETE" });
+    await fetch(`http://${DEFAULT_HOST}:${DEFAULT_PORT}/agents/cron-test-agent`, { method: "DELETE" });
+    await fetch(`http://${DEFAULT_HOST}:${DEFAULT_PORT}/agents/manual-only-agent`, { method: "DELETE" });
 
     // 2. Add agent
     const addOut = run("agents", "add", FIXTURE);

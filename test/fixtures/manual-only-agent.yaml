@@ -1,0 +1,6 @@
+name: manual-only-agent
+model: claude-sonnet-4-20250514
+description: Agent with only manual trigger
+prompt: You are a manual-only test agent.
+triggers:
+  - manual

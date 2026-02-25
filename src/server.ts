@@ -6,6 +6,7 @@ import { createAgent, getAgent, listAgents, removeAgent } from "./agents.ts";
 import { registerServer, listTools, callTool, disconnectAll } from "./tools/registry.ts";
 import { listRuns, getRun } from "./traces.ts";
 import { filesystemServerConfig } from "./tools/builtin/filesystem.ts";
+import { initScheduler, stopScheduler, scheduleAgent, unscheduleAgent } from "./scheduler.ts";
 
 const startTime = Date.now();
 
@@ -35,6 +36,7 @@ app.post("/agents", async (c) => {
 
   try {
     const agent = createAgent(body.yamlPath);
+    scheduleAgent(agent.name, agent.triggers);
     return c.json(agent, 201);
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
@@ -46,8 +48,10 @@ app.post("/agents", async (c) => {
 });
 
 app.delete("/agents/:name", (c) => {
-  const removed = removeAgent(c.req.param("name"));
-  if (!removed) return c.json({ error: `Agent "${c.req.param("name")}" not found` }, 404);
+  const name = c.req.param("name");
+  unscheduleAgent(name);
+  const removed = removeAgent(name);
+  if (!removed) return c.json({ error: `Agent "${name}" not found` }, 404);
   return c.body(null, 204);
 });
 
@@ -119,6 +123,7 @@ export async function startServer(): Promise<void> {
   const config = loadConfig();
   getDb(); // initialize database on startup
   await initTools();
+  initScheduler();
   serve(
     { fetch: app.fetch, hostname: config.host, port: config.port },
     (info) => {
@@ -128,6 +133,7 @@ export async function startServer(): Promise<void> {
 }
 
 async function shutdown(): Promise<void> {
+  stopScheduler();
   await disconnectAll();
   process.exit(0);
 }

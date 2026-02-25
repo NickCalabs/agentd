@@ -81,4 +81,19 @@ describe("agent YAML validation", () => {
     const path = writeYaml("desc-num.yaml", "name: foo\nmodel: claude-sonnet-4-20250514\nprompt: hi\ndescription: 123\n");
     expect(() => createAgent(path)).toThrow('"description" must be a string');
   });
+
+  it("rejects invalid cron expression", () => {
+    const path = writeYaml("bad-cron.yaml", "name: bad-cron\nmodel: claude-sonnet-4-20250514\nprompt: hi\ntriggers:\n  - 'cron:not valid'\n");
+    expect(() => createAgent(path)).toThrow("Invalid cron expression");
+  });
+
+  it("rejects unknown trigger type", () => {
+    const path = writeYaml("bad-trigger.yaml", "name: bad-trigger\nmodel: claude-sonnet-4-20250514\nprompt: hi\ntriggers:\n  - 'webhook:http://example.com'\n");
+    expect(() => createAgent(path)).toThrow('Unknown trigger type "webhook"');
+  });
+
+  it("rejects empty cron expression", () => {
+    const path = writeYaml("empty-cron.yaml", "name: empty-cron\nmodel: claude-sonnet-4-20250514\nprompt: hi\ntriggers:\n  - 'cron:'\n");
+    expect(() => createAgent(path)).toThrow("Empty cron expression");
+  });
 });
