@@ -10,6 +10,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.78.0",
     "@hono/node-server": "^1.14.1",
     "@modelcontextprotocol/sdk": "^1.27.1",
     "@modelcontextprotocol/server-filesystem": "^2026.1.14",

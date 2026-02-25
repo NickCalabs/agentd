@@ -15,6 +15,7 @@ Universal agent runtime daemon. TypeScript, Node 22+, pnpm.
 - CLI commands are thin HTTP clients over the daemon REST API
 - SQLite database at ~/.agentd/agentd.db, opened only by the server process
 - Tools are namespaced as <server>.<tool> (e.g., "filesystem.read_file")
+- Anthropic API tool names use double underscore (filesystem__read_file) since dots aren't allowed
 
 ## Structure
 src/index.ts — CLI entry point
@@ -23,6 +24,7 @@ src/server.ts — HTTP routes
 src/config.ts — YAML config loader
 src/state.ts  — SQLite database (better-sqlite3)
 src/agents.ts — Agent CRUD operations
+src/runner.ts — Agent execution loop (Anthropic API + tool calls)
 src/tools/registry.ts  — Tool registry (namespaced tools from MCP servers)
 src/tools/mcp-client.ts — MCP client wrapper (stdio transport)
 src/tools/builtin/filesystem.ts — Built-in filesystem MCP server config

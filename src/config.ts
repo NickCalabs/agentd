@@ -20,6 +20,22 @@ export function ensureAgentdDir(): void {
   }
 }
 
+export function loadApiKey(): string | null {
+  if (process.env.ANTHROPIC_API_KEY) {
+    return process.env.ANTHROPIC_API_KEY;
+  }
+
+  if (!existsSync(CONFIG_FILE)) return null;
+
+  const raw = readFileSync(CONFIG_FILE, "utf-8");
+  const parsed = parseYaml(raw) as Record<string, unknown> | null;
+  if (parsed && typeof parsed.api_key === "string") {
+    return parsed.api_key;
+  }
+
+  return null;
+}
+
 export function loadConfig(): AgentdConfig {
   const defaults: AgentdConfig = {
     port: DEFAULT_PORT,

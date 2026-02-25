@@ -4,5 +4,6 @@ description: A test agent that echoes input
 prompt: You are a test agent. Echo back whatever the user says.
 tools:
   - shell
+  - filesystem
 triggers:
   - manual

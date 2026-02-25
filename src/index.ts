@@ -27,6 +27,32 @@ program
   .description("Show daemon status")
   .action(status);
 
+program
+  .command("run <agent-name>")
+  .description("Run an agent")
+  .option("--context <text>", "Context to pass to the agent")
+  .action(async (agentName: string, opts: { context?: string }) => {
+    try {
+      console.error(`Running ${agentName}...`);
+      const res = await fetch(`${BASE_URL}/agents/${encodeURIComponent(agentName)}/run`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ context: opts.context }),
+      });
+      if (!res.ok) {
+        const body = (await res.json()) as { error: string };
+        console.error(`Error: ${body.error}`);
+        process.exitCode = 1;
+        return;
+      }
+      const result = (await res.json()) as { output: string };
+      console.log(result.output);
+    } catch {
+      console.error("Failed to reach daemon. Is the daemon running?");
+      process.exitCode = 1;
+    }
+  });
+
 const agents = program
   .command("agents")
   .description("Manage agents");

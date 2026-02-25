@@ -50,6 +50,22 @@ app.delete("/agents/:name", (c) => {
   return c.body(null, 204);
 });
 
+app.post("/agents/:name/run", async (c) => {
+  const name = c.req.param("name");
+  const body = await c.req.json<{ context?: string }>().catch(() => ({}));
+
+  try {
+    const { runAgent } = await import("./runner.ts");
+    const result = await runAgent(name, body.context);
+    return c.json(result);
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg.includes("not found")) return c.json({ error: msg }, 404);
+    if (msg.includes("API key")) return c.json({ error: msg }, 500);
+    return c.json({ error: msg }, 500);
+  }
+});
+
 app.get("/tools", (c) => {
   return c.json(listTools());
 });
