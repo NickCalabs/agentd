@@ -138,4 +138,12 @@ tools:
     expect(output).toContain("LLM call");
     expect(output).toContain("Tool call");
   }, 10_000);
+
+  it("CLI trace works with short ID prefix", () => {
+    const shortId = runId.slice(0, 8);
+    const output = run("trace", shortId);
+    expect(output).toContain("LLM call");
+    expect(output).toContain("Tool call");
+    expect(output).toContain(shortId);
+  }, 10_000);
 });

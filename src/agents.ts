@@ -32,26 +32,63 @@ function rowToAgent(row: AgentRow): Agent {
   };
 }
 
-export function createAgent(yamlPath: string): Agent {
-  const raw = readFileSync(yamlPath, "utf-8");
-  const parsed = parseYaml(raw) as Record<string, unknown>;
+const MODEL_PATTERN = /^claude-/;
 
-  if (!parsed || typeof parsed !== "object") {
-    throw new Error(`Invalid YAML in ${yamlPath}: expected a mapping`);
+function validateStringArray(value: unknown, field: string): string[] {
+  if (value === undefined || value === null) return [];
+  if (!Array.isArray(value)) {
+    throw new Error(`"${field}" must be an array, got ${typeof value}`);
+  }
+  for (let i = 0; i < value.length; i++) {
+    if (typeof value[i] !== "string") {
+      throw new Error(`"${field}[${i}]" must be a string, got ${typeof value[i]}`);
+    }
+  }
+  return value as string[];
+}
+
+export function createAgent(yamlPath: string): Agent {
+  let raw: string;
+  try {
+    raw = readFileSync(yamlPath, "utf-8");
+  } catch (err: unknown) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === "ENOENT") throw new Error(`File not found: ${yamlPath}`);
+    if (code === "EISDIR") throw new Error(`Path is a directory, not a file: ${yamlPath}`);
+    if (code === "EACCES") throw new Error(`Permission denied: ${yamlPath}`);
+    throw new Error(`Cannot read ${yamlPath}: ${(err as Error).message}`);
   }
 
-  const { name, model, prompt, description, tools, triggers } = parsed as {
-    name?: string;
-    model?: string;
-    prompt?: string;
-    description?: string;
-    tools?: string[];
-    triggers?: string[];
-  };
+  let parsed: unknown;
+  try {
+    parsed = parseYaml(raw);
+  } catch (err: unknown) {
+    throw new Error(`Invalid YAML syntax in ${yamlPath}: ${(err as Error).message}`);
+  }
 
-  if (!name) throw new Error("Agent YAML is missing required field: name");
-  if (!model) throw new Error("Agent YAML is missing required field: model");
-  if (!prompt) throw new Error("Agent YAML is missing required field: prompt");
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new Error(`Invalid YAML in ${yamlPath}: expected a mapping (got ${parsed === null ? "null" : typeof parsed})`);
+  }
+
+  const doc = parsed as Record<string, unknown>;
+  const name = doc.name;
+  const model = doc.model;
+  const prompt = doc.prompt;
+  const description = doc.description;
+
+  if (!name || typeof name !== "string") throw new Error("Agent YAML is missing required field: name");
+  if (!model || typeof model !== "string") throw new Error("Agent YAML is missing required field: model");
+  if (!prompt || typeof prompt !== "string") throw new Error("Agent YAML is missing required field: prompt");
+  if (description !== undefined && typeof description !== "string") {
+    throw new Error(`"description" must be a string, got ${typeof description}`);
+  }
+
+  if (!MODEL_PATTERN.test(model)) {
+    throw new Error(`Unknown model "${model}". Model must start with "claude-" (e.g. "claude-sonnet-4-20250514")`);
+  }
+
+  const tools = validateStringArray(doc.tools, "tools");
+  const triggers = validateStringArray(doc.triggers, "triggers");
 
   const now = new Date().toISOString();
   const db = getDb();
@@ -61,24 +98,26 @@ export function createAgent(yamlPath: string): Agent {
     VALUES (@name, @description, @model, @prompt, @tools, @triggers, @created_at, @updated_at)
   `);
 
+  const desc = (description as string) ?? null;
+
   stmt.run({
     name,
-    description: description ?? null,
+    description: desc,
     model,
     prompt,
-    tools: JSON.stringify(tools ?? []),
-    triggers: JSON.stringify(triggers ?? []),
+    tools: JSON.stringify(tools),
+    triggers: JSON.stringify(triggers),
     created_at: now,
     updated_at: now,
   });
 
   return {
-    name,
-    description: description ?? null,
-    model,
-    prompt,
-    tools: tools ?? [],
-    triggers: triggers ?? [],
+    name: name as string,
+    description: desc,
+    model: model as string,
+    prompt: prompt as string,
+    tools,
+    triggers,
     created_at: now,
     updated_at: now,
   };
