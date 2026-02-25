@@ -127,10 +127,13 @@ export async function startServer(): Promise<void> {
   );
 }
 
-process.on("SIGTERM", async () => {
+async function shutdown(): Promise<void> {
   await disconnectAll();
   process.exit(0);
-});
+}
+
+process.on("SIGTERM", shutdown);
+process.on("SIGINT", shutdown);
 
 // When run directly as a detached child, start the server.
 // import.meta.url ends with /server.ts; process.argv[1] is the file node was invoked with.

@@ -51,6 +51,19 @@ export async function start(): Promise<void> {
   console.log(`agentd started (pid ${pid})`);
 }
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+async function waitForExit(pid: number, timeoutMs: number, intervalMs = 200): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (!isProcessAlive(pid)) return true;
+    await sleep(intervalMs);
+  }
+  return !isProcessAlive(pid);
+}
+
 export async function stop(): Promise<void> {
   const pid = readPid();
   if (pid === null) {
@@ -65,8 +78,22 @@ export async function stop(): Promise<void> {
   }
 
   process.kill(pid, "SIGTERM");
-  unlinkSync(PID_FILE);
-  console.log(`agentd stopped (pid ${pid})`);
+
+  if (await waitForExit(pid, 3000)) {
+    unlinkSync(PID_FILE);
+    console.log(`agentd stopped (pid ${pid})`);
+    return;
+  }
+
+  // Still alive after 3s — force kill
+  try {
+    process.kill(pid, "SIGKILL");
+  } catch {
+    // Already dead between the check and the kill
+  }
+  await sleep(500);
+  if (existsSync(PID_FILE)) unlinkSync(PID_FILE);
+  console.log(`agentd killed (pid ${pid})`);
 }
 
 export async function status(): Promise<void> {
