@@ -1,0 +1,23 @@
+{
+  "name": "agentd",
+  "version": "0.1.0",
+  "type": "module",
+  "bin": {
+    "agentd": "./bin/agentd"
+  },
+  "scripts": {
+    "start": "node --experimental-strip-types src/index.ts start",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@hono/node-server": "^1.14.1",
+    "commander": "^13.1.0",
+    "hono": "^4.7.4",
+    "yaml": "^2.7.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.4",
+    "vitest": "^3.0.6"
+  },
+  "packageManager": "pnpm@10.30.2+sha512.36cdc707e7b7940a988c9c1ecf88d084f8514b5c3f085f53a2e244c2921d3b2545bc20dd4ebe1fc245feec463bb298aecea7a63ed1f7680b877dc6379d8d0cb4"
+}
