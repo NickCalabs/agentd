@@ -12,12 +12,16 @@ Universal agent runtime daemon. TypeScript, Node 22+, pnpm.
 - No build step in dev
 - All state lives in ~/.agentd/
 - Daemon listens on localhost:4700
+- CLI commands are thin HTTP clients over the daemon REST API
+- SQLite database at ~/.agentd/agentd.db, opened only by the server process
 
 ## Structure
 src/index.ts — CLI entry point
 src/daemon.ts — start/stop/status
 src/server.ts — HTTP routes
 src/config.ts — YAML config loader
+src/state.ts  — SQLite database (better-sqlite3)
+src/agents.ts — Agent CRUD operations
 
 ## Rules
 - No classes unless necessary. Prefer plain functions and objects.
