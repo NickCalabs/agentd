@@ -3,6 +3,8 @@ import { serve } from "@hono/node-server";
 import { loadConfig } from "./config.ts";
 import { getDb } from "./state.ts";
 import { createAgent, getAgent, listAgents, removeAgent } from "./agents.ts";
+import { registerServer, listTools, callTool, disconnectAll } from "./tools/registry.ts";
+import { filesystemServerConfig } from "./tools/builtin/filesystem.ts";
 
 const startTime = Date.now();
 
@@ -48,11 +50,40 @@ app.delete("/agents/:name", (c) => {
   return c.body(null, 204);
 });
 
+app.get("/tools", (c) => {
+  return c.json(listTools());
+});
+
+app.post("/tools/call", async (c) => {
+  const body = await c.req.json<{ tool?: string; args?: Record<string, unknown> }>();
+  if (!body.tool) return c.json({ error: "Missing 'tool' field in request body" }, 400);
+
+  try {
+    const result = await callTool(body.tool, body.args);
+    return c.json(result);
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return c.json({ error: msg }, 400);
+  }
+});
+
 export { app };
 
-export function startServer(): void {
+async function initTools(): Promise<void> {
+  try {
+    const config = filesystemServerConfig();
+    await registerServer("filesystem", config);
+    console.log("Registered MCP server: filesystem");
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.warn(`Warning: failed to register filesystem MCP server: ${msg}`);
+  }
+}
+
+export async function startServer(): Promise<void> {
   const config = loadConfig();
   getDb(); // initialize database on startup
+  await initTools();
   serve(
     { fetch: app.fetch, hostname: config.host, port: config.port },
     (info) => {
@@ -61,6 +92,11 @@ export function startServer(): void {
   );
 }
 
+process.on("SIGTERM", async () => {
+  await disconnectAll();
+  process.exit(0);
+});
+
 // When run directly as a detached child, start the server.
 // import.meta.url ends with /server.ts; process.argv[1] is the file node was invoked with.
 const isDirectRun =
@@ -68,5 +104,8 @@ const isDirectRun =
   import.meta.url.endsWith(process.argv[1].replace(/.*(?=\/src\/)/, ""));
 
 if (isDirectRun) {
-  startServer();
+  startServer().catch((err) => {
+    console.error("Failed to start server:", err);
+    process.exit(1);
+  });
 }

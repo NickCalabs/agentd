@@ -98,4 +98,29 @@ agents
     }
   });
 
+const tools = program
+  .command("tools")
+  .description("Manage tools");
+
+tools
+  .command("list")
+  .description("List available tools")
+  .action(async () => {
+    try {
+      const res = await fetch(`${BASE_URL}/tools`);
+      const data = (await res.json()) as { name: string; serverName: string; description?: string }[];
+      if (data.length === 0) {
+        console.log("No tools available.");
+        return;
+      }
+      console.log("Tool\tServer\tDescription");
+      for (const t of data) {
+        console.log(`${t.name}\t${t.serverName}\t${t.description ?? ""}`);
+      }
+    } catch {
+      console.error("Failed to reach daemon. Is the daemon running?");
+      process.exitCode = 1;
+    }
+  });
+
 program.parse();
