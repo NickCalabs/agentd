@@ -1,0 +1,5 @@
+#!/bin/sh
+set -e
+echo "Installing agentd..."
+npm install -g agentd
+echo "Done. Run 'agentd start' to begin."
