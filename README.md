@@ -292,6 +292,7 @@ Requires Node.js 22+. Docker optional (enables container sandboxing).
 
 ---
 
+<!-- TODO: docs site
 ## Documentation
 
 → [Getting Started](https://agentd.sh/docs/getting-started)
@@ -304,6 +305,7 @@ Requires Node.js 22+. Docker optional (enables container sandboxing).
 
 → [GitHub Discussions](https://github.com/agentd-sh/agentd/discussions)
 → [Share your agent](https://github.com/agentd-sh/agentd/discussions/categories/show-and-tell)
+-->
 
 ## License
 
