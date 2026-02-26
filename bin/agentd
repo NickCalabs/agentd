@@ -8,4 +8,4 @@ while [ -L "$SCRIPT" ]; do
   case "$SCRIPT" in /*) ;; *) SCRIPT="$DIR/$SCRIPT" ;; esac
 done
 DIR="$(cd "$(dirname "$SCRIPT")" && pwd)"
-exec node --disable-warning=ExperimentalWarning --experimental-strip-types "$DIR/../src/index.ts" "$@"
+exec node "$DIR/../dist/index.js" "$@"

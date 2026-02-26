@@ -35,7 +35,7 @@ export async function registerServer(
   const existing = servers.get(name);
   if (existing) {
     if (opts?.replace) {
-      await existing.client.disconnect().catch(() => {});
+      await existing.client?.disconnect().catch(() => {});
     } else {
       console.warn(`MCP server "${name}" already registered (source: ${existing.source}), skipping`);
       return [...existing.tools.values()];
@@ -130,5 +130,5 @@ export async function callTool(
 export async function disconnectAll(): Promise<void> {
   const entries = [...servers.values()];
   servers.clear();
-  await Promise.allSettled(entries.map((e) => e.client.disconnect()));
+  await Promise.allSettled(entries.map((e) => e.client?.disconnect()));
 }

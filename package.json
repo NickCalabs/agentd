@@ -5,8 +5,14 @@
   "bin": {
     "agentd": "./bin/agentd"
   },
+  "files": [
+    "dist/",
+    "bin/"
+  ],
   "scripts": {
     "start": "node --disable-warning=ExperimentalWarning --experimental-strip-types src/index.ts start",
+    "build": "tsc -p tsconfig.build.json",
+    "prepare": "tsc -p tsconfig.build.json",
     "test": "vitest run"
   },
   "dependencies": {
@@ -25,6 +31,7 @@
     "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^22.13.4",
     "@types/node-cron": "^3.0.11",
+    "typescript": "^5.9.3",
     "vitest": "^3.0.6"
   },
   "pnpm": {

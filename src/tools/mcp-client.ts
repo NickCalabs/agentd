@@ -49,7 +49,7 @@ export async function createMcpClient(options: McpClientOptions): Promise<McpCli
       const result = await client.callTool({ name, arguments: args });
       return {
         content: result.content as unknown[],
-        isError: result.isError,
+        isError: result.isError as boolean | undefined,
       };
     },
 

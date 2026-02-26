@@ -64,7 +64,7 @@ app.post("/agents/:name/run", async (c) => {
 
   try {
     const { runAgent } = await import("./runner.ts");
-    const result = await runAgent(name, body.context);
+    const result = await runAgent(name, "context" in body ? body.context : undefined);
     return c.json(result);
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
