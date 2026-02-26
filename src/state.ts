@@ -1,25 +1,75 @@
 import { createRequire } from "node:module";
 import { join } from "node:path";
-import type DatabaseConstructor from "better-sqlite3";
+import { unlinkSync } from "node:fs";
 import { AGENTD_DIR, ensureAgentdDir } from "./config.ts";
 
 const require = createRequire(import.meta.url);
-const Database = require("better-sqlite3") as typeof DatabaseConstructor;
+const { Database } = require("node-sqlite3-wasm") as {
+  Database: new (path: string) => RawDb;
+};
+
+interface RawDb {
+  exec(sql: string): void;
+  run(sql: string, values?: unknown): { changes: number; lastInsertRowid: number };
+  get(sql: string, values?: unknown): Record<string, unknown> | undefined;
+  all(sql: string, values?: unknown): Record<string, unknown>[];
+  close(): void;
+}
+
+// Compatibility layer matching the better-sqlite3 API surface used by this project
+interface RunResult {
+  changes: number;
+}
+
+interface Statement {
+  run(...params: unknown[]): RunResult;
+  get(...params: unknown[]): unknown;
+  all(...params: unknown[]): unknown[];
+}
+
+interface CompatDb {
+  exec(sql: string): void;
+  prepare(sql: string): Statement;
+}
 
 export const DB_PATH = join(AGENTD_DIR, "agentd.db");
 
-let db: InstanceType<typeof DatabaseConstructor> | null = null;
+let db: CompatDb | null = null;
 
-export function getDb(): InstanceType<typeof DatabaseConstructor> {
+function normalizeParams(params: unknown[]): unknown | undefined {
+  if (params.length === 0) return undefined;
+  if (params.length === 1) {
+    const p = params[0];
+    if (p !== null && p !== undefined && typeof p === "object" && !Array.isArray(p)) {
+      // Named params: better-sqlite3 uses { name: val } with @name in SQL
+      // node-sqlite3-wasm uses { "@name": val } — add the @ prefix
+      const mapped: Record<string, unknown> = {};
+      for (const [k, v] of Object.entries(p as Record<string, unknown>)) {
+        mapped[`@${k}`] = v;
+      }
+      return mapped;
+    }
+    return p;
+  }
+  // Multiple positional args → array
+  return params;
+}
+
+export function getDb(): CompatDb {
   if (db) return db;
 
   ensureAgentdDir();
-  db = new Database(DB_PATH);
 
-  db.pragma("journal_mode = WAL");
-  db.pragma("foreign_keys = ON");
+  // Clean up stale WAL/SHM files from previous better-sqlite3 installs
+  // node-sqlite3-wasm's VFS cannot open databases with leftover native WAL state
+  for (const suffix of ["-wal", "-shm"]) {
+    try { unlinkSync(DB_PATH + suffix); } catch { /* doesn't exist */ }
+  }
 
-  db.exec(`
+  const rawDb = new Database(DB_PATH);
+  // node-sqlite3-wasm enables foreign keys by default
+
+  rawDb.exec(`
     CREATE TABLE IF NOT EXISTS agents (
       name        TEXT PRIMARY KEY,
       description TEXT,
@@ -67,10 +117,19 @@ export function getDb(): InstanceType<typeof DatabaseConstructor> {
   `);
 
   // Migrations
-  const columns = db.pragma("table_info(agents)") as { name: string }[];
+  const columns = rawDb.all("PRAGMA table_info(agents)") as { name: string }[];
   if (!columns.some((c) => c.name === "next_run")) {
-    db.exec("ALTER TABLE agents ADD COLUMN next_run TEXT");
+    rawDb.exec("ALTER TABLE agents ADD COLUMN next_run TEXT");
   }
+
+  db = {
+    exec: (sql: string) => rawDb.exec(sql),
+    prepare: (sql: string) => ({
+      run: (...params: unknown[]): RunResult => rawDb.run(sql, normalizeParams(params)),
+      get: (...params: unknown[]) => rawDb.get(sql, normalizeParams(params)),
+      all: (...params: unknown[]) => rawDb.all(sql, normalizeParams(params)),
+    }),
+  };
 
   return db;
 }
