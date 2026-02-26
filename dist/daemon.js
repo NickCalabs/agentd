@@ -30,8 +30,13 @@ export async function start() {
         unlinkSync(PID_FILE);
         console.log(`Cleaned up stale PID file (pid ${existingPid})`);
     }
-    const serverPath = resolve(import.meta.dirname, "server.ts");
-    const child = spawn(process.execPath, ["--disable-warning=ExperimentalWarning --experimental-strip-types", serverPath], {
+    // When running from dist/, the file is server.js; from src/ it's server.ts
+    const dir = import.meta.dirname;
+    const serverPath = resolve(dir, existsSync(resolve(dir, "server.js")) ? "server.js" : "server.ts");
+    const args = serverPath.endsWith(".ts")
+        ? ["--disable-warning=ExperimentalWarning", "--experimental-strip-types", serverPath]
+        : [serverPath];
+    const child = spawn(process.execPath, args, {
         detached: true,
         stdio: "ignore",
         env: { ...process.env },
