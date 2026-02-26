@@ -1,5 +1,10 @@
 #!/bin/sh
 set -e
 echo "Installing agentd..."
-npm install -g github:NickCalabs/agentd
-echo "Done. Run 'agentd start' to begin."
+TMP=$(mktemp -d)
+git clone --depth 1 --quiet https://github.com/NickCalabs/agentd.git "$TMP"
+cd "$TMP"
+npm install --production --silent 2>/dev/null
+npm link --silent 2>/dev/null
+rm -rf "$TMP"
+echo "✓ agentd installed. Run 'agentd start' to begin."
