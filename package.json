@@ -12,7 +12,6 @@
   "scripts": {
     "start": "node --disable-warning=ExperimentalWarning --experimental-strip-types src/index.ts start",
     "build": "tsc -p tsconfig.build.json",
-    "prepare": "tsc -p tsconfig.build.json",
     "test": "vitest run"
   },
   "dependencies": {
