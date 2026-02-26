@@ -108,7 +108,8 @@ app.post("/tools/call", async (c) => {
 export { app };
 async function initTools() {
     try {
-        const config = filesystemServerConfig();
+        const cfg = loadConfig();
+        const config = filesystemServerConfig(cfg.filesystem_allowed_paths);
         await registerServer("filesystem", config, "built-in");
         console.log("Registered MCP server: filesystem (source: built-in)");
     }
@@ -127,8 +128,17 @@ export async function startServer() {
     getDb(); // initialize database on startup
     await initTools();
     initScheduler();
-    serve({ fetch: app.fetch, hostname: config.host, port: config.port }, (info) => {
+    const server = serve({ fetch: app.fetch, hostname: config.host, port: config.port }, (info) => {
         console.log(`agentd listening on ${info.address}:${info.port}`);
+    });
+    server.on("error", (err) => {
+        if (err.code === "EADDRINUSE") {
+            console.error(`Error: port ${config.port} is already in use. Is another agentd instance running?`);
+        }
+        else {
+            console.error(`Server error: ${err.message}`);
+        }
+        process.exit(1);
     });
 }
 async function shutdown() {

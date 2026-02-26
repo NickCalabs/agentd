@@ -76,8 +76,13 @@ describe("tool registry", () => {
     expect(toolsRes.status).toBe(200);
     const tools = (await toolsRes.json()) as { name: string; serverName: string; source: string }[];
     expect(tools.length).toBeGreaterThan(0);
-    expect(tools.every((t) => t.name.startsWith("filesystem."))).toBe(true);
+    const serverNames = new Set(tools.map((t) => t.serverName));
+    expect(serverNames.has("filesystem")).toBe(true);
+    expect(serverNames.has("shell")).toBe(true);
+    expect(serverNames.has("git")).toBe(true);
     expect(tools.some((t) => t.name === "filesystem.list_directory")).toBe(true);
+    expect(tools.some((t) => t.name === "shell.run_command")).toBe(true);
+    expect(tools.some((t) => t.name === "git.status")).toBe(true);
 
     // 4. POST /tools/call — call list_directory on /tmp
     const callRes = await fetch(`${BASE_URL}/tools/call`, {

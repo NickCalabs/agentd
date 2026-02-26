@@ -113,7 +113,8 @@ export { app };
 
 async function initTools(): Promise<void> {
   try {
-    const config = filesystemServerConfig();
+    const cfg = loadConfig();
+    const config = filesystemServerConfig(cfg.filesystem_allowed_paths);
     await registerServer("filesystem", config, "built-in");
     console.log("Registered MCP server: filesystem (source: built-in)");
   } catch (err: unknown) {
@@ -135,12 +136,20 @@ export async function startServer(): Promise<void> {
   getDb(); // initialize database on startup
   await initTools();
   initScheduler();
-  serve(
+  const server = serve(
     { fetch: app.fetch, hostname: config.host, port: config.port },
     (info) => {
       console.log(`agentd listening on ${info.address}:${info.port}`);
     },
   );
+  server.on("error", (err: NodeJS.ErrnoException) => {
+    if (err.code === "EADDRINUSE") {
+      console.error(`Error: port ${config.port} is already in use. Is another agentd instance running?`);
+    } else {
+      console.error(`Server error: ${err.message}`);
+    }
+    process.exit(1);
+  });
 }
 
 async function shutdown(): Promise<void> {

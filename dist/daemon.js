@@ -1,7 +1,8 @@
 import { spawn } from "node:child_process";
-import { readFileSync, writeFileSync, unlinkSync, existsSync } from "node:fs";
-import { resolve } from "node:path";
-import { PID_FILE, DEFAULT_PORT, DEFAULT_HOST, ensureAgentdDir } from "./config.js";
+import { readFileSync, writeFileSync, unlinkSync, existsSync, openSync, closeSync } from "node:fs";
+import { resolve, join } from "node:path";
+import { PID_FILE, DEFAULT_PORT, DEFAULT_HOST, AGENTD_DIR, ensureAgentdDir } from "./config.js";
+export const LOG_FILE = join(AGENTD_DIR, "daemon.log");
 function isProcessAlive(pid) {
     try {
         process.kill(pid, 0);
@@ -30,24 +31,76 @@ export async function start() {
         unlinkSync(PID_FILE);
         console.log(`Cleaned up stale PID file (pid ${existingPid})`);
     }
+    // Check if something is already listening on the port (covers the case where
+    // the PID file was deleted but the daemon is still running)
+    try {
+        const res = await fetch(`http://${DEFAULT_HOST}:${DEFAULT_PORT}/health`);
+        if (res.ok) {
+            console.log(`agentd is already running on port ${DEFAULT_PORT} (PID file was missing)`);
+            return;
+        }
+    }
+    catch {
+        // Nothing listening — good, we can proceed
+    }
     // When running from dist/, the file is server.js; from src/ it's server.ts
     const dir = import.meta.dirname;
     const serverPath = resolve(dir, existsSync(resolve(dir, "server.js")) ? "server.js" : "server.ts");
     const args = serverPath.endsWith(".ts")
         ? ["--disable-warning=ExperimentalWarning", "--experimental-strip-types", serverPath]
         : [serverPath];
+    const logFd = openSync(LOG_FILE, "w");
     const child = spawn(process.execPath, args, {
         detached: true,
-        stdio: "ignore",
+        stdio: ["ignore", logFd, logFd],
         env: { ...process.env },
     });
     child.unref();
+    closeSync(logFd);
     const pid = child.pid;
     writeFileSync(PID_FILE, String(pid), "utf-8");
+    // Wait for the daemon to become healthy or die trying
+    const healthy = await waitForHealthy(pid);
+    if (!healthy) {
+        if (!isProcessAlive(pid)) {
+            // Process actually crashed — clean up PID file and report
+            if (existsSync(PID_FILE))
+                unlinkSync(PID_FILE);
+            const log = existsSync(LOG_FILE) ? readFileSync(LOG_FILE, "utf-8").trim() : "";
+            const lastLines = log.split("\n").slice(-5).join("\n");
+            console.error(`agentd failed to start (pid ${pid})`);
+            if (lastLines) {
+                console.error(`Log output (${LOG_FILE}):\n${lastLines}`);
+            }
+            process.exitCode = 1;
+            return;
+        }
+        // Process is alive but health endpoint not ready yet — still starting up
+        console.log(`agentd started (pid ${pid}), still initializing...`);
+        return;
+    }
     console.log(`agentd started (pid ${pid})`);
 }
 function sleep(ms) {
     return new Promise((r) => setTimeout(r, ms));
+}
+async function waitForHealthy(pid, timeoutMs = 10_000, intervalMs = 200) {
+    const url = `http://${DEFAULT_HOST}:${DEFAULT_PORT}/health`;
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+        if (!isProcessAlive(pid))
+            return false;
+        try {
+            const res = await fetch(url);
+            if (res.ok)
+                return true;
+        }
+        catch {
+            // Not ready yet
+        }
+        await sleep(intervalMs);
+    }
+    return false;
 }
 async function waitForExit(pid, timeoutMs, intervalMs = 200) {
     const deadline = Date.now() + timeoutMs;

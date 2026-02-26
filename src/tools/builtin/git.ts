@@ -1,8 +1,8 @@
-import { execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import type { LocalToolDef } from "../registry.ts";
 
-function git(args: string, cwd?: string): string {
-  return execSync(`git ${args}`, { cwd, timeout: 15_000, encoding: "utf-8", maxBuffer: 1024 * 1024 }).trim();
+function git(args: string[], cwd?: string): string {
+  return execFileSync("git", args, { cwd, timeout: 15_000, encoding: "utf-8", maxBuffer: 1024 * 1024 }).trim();
 }
 
 export const gitTools: LocalToolDef[] = [
@@ -17,7 +17,7 @@ export const gitTools: LocalToolDef[] = [
     },
     handler: async (args) => {
       try {
-        const output = git("status --short", args.cwd as string | undefined);
+        const output = git(["status", "--short"], args.cwd as string | undefined);
         return { content: [{ type: "text", text: output || "(clean)" }] };
       } catch (err: unknown) {
         return { content: [{ type: "text", text: (err as Error).message }], isError: true };
@@ -36,8 +36,9 @@ export const gitTools: LocalToolDef[] = [
     },
     handler: async (args) => {
       try {
-        const flag = args.staged ? " --cached" : "";
-        const output = git(`diff${flag}`, args.cwd as string | undefined);
+        const diffArgs = ["diff"];
+        if (args.staged) diffArgs.push("--cached");
+        const output = git(diffArgs, args.cwd as string | undefined);
         return { content: [{ type: "text", text: output || "(no changes)" }] };
       } catch (err: unknown) {
         return { content: [{ type: "text", text: (err as Error).message }], isError: true };
@@ -57,7 +58,7 @@ export const gitTools: LocalToolDef[] = [
     handler: async (args) => {
       try {
         const n = Number(args.count) || 10;
-        const output = git(`log --oneline -n ${n}`, args.cwd as string | undefined);
+        const output = git(["log", "--oneline", "-n", String(n)], args.cwd as string | undefined);
         return { content: [{ type: "text", text: output }] };
       } catch (err: unknown) {
         return { content: [{ type: "text", text: (err as Error).message }], isError: true };
@@ -77,7 +78,7 @@ export const gitTools: LocalToolDef[] = [
     handler: async (args) => {
       try {
         const ref = String(args.ref || "HEAD");
-        const output = git(`show --stat ${ref}`, args.cwd as string | undefined);
+        const output = git(["show", "--stat", ref], args.cwd as string | undefined);
         return { content: [{ type: "text", text: output }] };
       } catch (err: unknown) {
         return { content: [{ type: "text", text: (err as Error).message }], isError: true };

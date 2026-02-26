@@ -1,4 +1,17 @@
-import { execSync } from "node:child_process";
+import { execSync, execFileSync } from "node:child_process";
+const ENV_BLOCKLIST_EXACT = new Set([
+    "ANTHROPIC_API_KEY",
+    "AWS_SECRET_ACCESS_KEY",
+    "AWS_SESSION_TOKEN",
+    "OPENAI_API_KEY",
+]);
+const ENV_BLOCKLIST_SUFFIXES = ["_TOKEN", "_SECRET", "_PASSWORD"];
+function isBlockedEnvVar(name) {
+    if (ENV_BLOCKLIST_EXACT.has(name))
+        return true;
+    const upper = name.toUpperCase();
+    return ENV_BLOCKLIST_SUFFIXES.some((suffix) => upper.endsWith(suffix));
+}
 export const shellTools = [
     {
         name: "run_command",
@@ -35,9 +48,13 @@ export const shellTools = [
             required: ["name"],
         },
         handler: async (args) => {
-            const val = process.env[String(args.name)];
+            const name = String(args.name);
+            if (isBlockedEnvVar(name)) {
+                return { content: [{ type: "text", text: "[REDACTED]" }] };
+            }
+            const val = process.env[name];
             if (val === undefined) {
-                return { content: [{ type: "text", text: `Environment variable "${args.name}" is not set` }], isError: true };
+                return { content: [{ type: "text", text: `Environment variable "${name}" is not set` }], isError: true };
             }
             return { content: [{ type: "text", text: val }] };
         },
@@ -54,7 +71,7 @@ export const shellTools = [
         },
         handler: async (args) => {
             try {
-                const output = execSync(`which ${String(args.command)}`, { encoding: "utf-8", timeout: 5_000 }).trim();
+                const output = execFileSync("which", [String(args.command)], { encoding: "utf-8", timeout: 5_000 }).trim();
                 return { content: [{ type: "text", text: output }] };
             }
             catch {

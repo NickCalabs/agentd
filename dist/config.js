@@ -6,7 +6,7 @@ export const AGENTD_DIR = join(homedir(), ".agentd");
 export const PID_FILE = join(AGENTD_DIR, "agentd.pid");
 export const CONFIG_FILE = join(AGENTD_DIR, "config.yaml");
 export const DEFAULT_PORT = 4700;
-export const DEFAULT_HOST = "localhost";
+export const DEFAULT_HOST = "127.0.0.1";
 export function ensureAgentdDir() {
     if (!existsSync(AGENTD_DIR)) {
         mkdirSync(AGENTD_DIR, { recursive: true });

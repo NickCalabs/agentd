@@ -1,6 +1,6 @@
-import { execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 function git(args, cwd) {
-    return execSync(`git ${args}`, { cwd, timeout: 15_000, encoding: "utf-8", maxBuffer: 1024 * 1024 }).trim();
+    return execFileSync("git", args, { cwd, timeout: 15_000, encoding: "utf-8", maxBuffer: 1024 * 1024 }).trim();
 }
 export const gitTools = [
     {
@@ -14,7 +14,7 @@ export const gitTools = [
         },
         handler: async (args) => {
             try {
-                const output = git("status --short", args.cwd);
+                const output = git(["status", "--short"], args.cwd);
                 return { content: [{ type: "text", text: output || "(clean)" }] };
             }
             catch (err) {
@@ -34,8 +34,10 @@ export const gitTools = [
         },
         handler: async (args) => {
             try {
-                const flag = args.staged ? " --cached" : "";
-                const output = git(`diff${flag}`, args.cwd);
+                const diffArgs = ["diff"];
+                if (args.staged)
+                    diffArgs.push("--cached");
+                const output = git(diffArgs, args.cwd);
                 return { content: [{ type: "text", text: output || "(no changes)" }] };
             }
             catch (err) {
@@ -56,7 +58,7 @@ export const gitTools = [
         handler: async (args) => {
             try {
                 const n = Number(args.count) || 10;
-                const output = git(`log --oneline -n ${n}`, args.cwd);
+                const output = git(["log", "--oneline", "-n", String(n)], args.cwd);
                 return { content: [{ type: "text", text: output }] };
             }
             catch (err) {
@@ -77,7 +79,7 @@ export const gitTools = [
         handler: async (args) => {
             try {
                 const ref = String(args.ref || "HEAD");
-                const output = git(`show --stat ${ref}`, args.cwd);
+                const output = git(["show", "--stat", ref], args.cwd);
                 return { content: [{ type: "text", text: output }] };
             }
             catch (err) {
