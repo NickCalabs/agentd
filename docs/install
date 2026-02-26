@@ -1,10 +1,10 @@
 #!/bin/sh
 set -e
 echo "Installing agentd..."
-TMP=$(mktemp -d)
-git clone --depth 1 --quiet https://github.com/NickCalabs/agentd.git "$TMP"
-cd "$TMP"
+INSTALL_DIR="$HOME/.agentd-install"
+rm -rf "$INSTALL_DIR"
+git clone --depth 1 --quiet https://github.com/NickCalabs/agentd.git "$INSTALL_DIR"
+cd "$INSTALL_DIR"
 npm install --production --silent 2>/dev/null
 npm link --silent 2>/dev/null
-rm -rf "$TMP"
 echo "✓ agentd installed. Run 'agentd start' to begin."
