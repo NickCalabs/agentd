@@ -3,9 +3,11 @@ import { serve } from "@hono/node-server";
 import { loadConfig } from "./config.ts";
 import { getDb } from "./state.ts";
 import { createAgent, getAgent, listAgents, removeAgent } from "./agents.ts";
-import { registerServer, listTools, callTool, disconnectAll } from "./tools/registry.ts";
+import { registerServer, registerLocalServer, listTools, callTool, disconnectAll } from "./tools/registry.ts";
 import { listRuns, getRun } from "./traces.ts";
 import { filesystemServerConfig } from "./tools/builtin/filesystem.ts";
+import { shellTools } from "./tools/builtin/shell.ts";
+import { gitTools } from "./tools/builtin/git.ts";
 import { discoverMcpServers } from "./tools/discovery.ts";
 import { initScheduler, stopScheduler, scheduleAgent, unscheduleAgent } from "./scheduler.ts";
 
@@ -118,6 +120,12 @@ async function initTools(): Promise<void> {
     const msg = err instanceof Error ? err.message : String(err);
     console.warn(`Warning: failed to register filesystem MCP server: ${msg}`);
   }
+
+  registerLocalServer("shell", shellTools, "built-in");
+  console.log("Registered local tools: shell (source: built-in)");
+
+  registerLocalServer("git", gitTools, "built-in");
+  console.log("Registered local tools: git (source: built-in)");
 
   await discoverMcpServers();
 }

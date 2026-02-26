@@ -1,2 +1,11 @@
 #!/bin/sh
-exec node --experimental-strip-types "$(dirname "$0")/../src/index.ts" "$@"
+# Resolve symlinks so this works when invoked via `npm link`
+SCRIPT="$0"
+while [ -L "$SCRIPT" ]; do
+  DIR="$(cd "$(dirname "$SCRIPT")" && pwd)"
+  SCRIPT="$(readlink "$SCRIPT")"
+  # If readlink returned a relative path, resolve it
+  case "$SCRIPT" in /*) ;; *) SCRIPT="$DIR/$SCRIPT" ;; esac
+done
+DIR="$(cd "$(dirname "$SCRIPT")" && pwd)"
+exec node --disable-warning=ExperimentalWarning --experimental-strip-types "$DIR/../src/index.ts" "$@"

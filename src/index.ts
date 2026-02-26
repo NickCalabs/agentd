@@ -1,7 +1,8 @@
 import { Command } from "commander";
 import { resolve } from "node:path";
+import { existsSync } from "node:fs";
 import { start, stop, status } from "./daemon.ts";
-import { DEFAULT_PORT, DEFAULT_HOST } from "./config.ts";
+import { DEFAULT_PORT, DEFAULT_HOST, AGENTD_DIR } from "./config.ts";
 
 const BASE_URL = `http://${DEFAULT_HOST}:${DEFAULT_PORT}`;
 
@@ -46,7 +47,7 @@ program
         return;
       }
       const result = (await res.json()) as { output: string };
-      console.log(result.output);
+      console.log(result.output.trimEnd());
     } catch {
       console.error("Failed to reach daemon. Is the daemon running?");
       process.exitCode = 1;
@@ -238,11 +239,24 @@ agents
   });
 
 agents
-  .command("add <path>")
-  .description("Register an agent from a YAML file")
-  .action(async (path: string) => {
+  .command("add <name-or-path>")
+  .description("Register an agent by name or YAML file path")
+  .action(async (nameOrPath: string) => {
     try {
-      const yamlPath = resolve(path);
+      // If it looks like a bare name (no slashes, no .yaml/.yml extension), resolve
+      // to the conventional path: ~/.agentd/agents/<name>/agent.yaml
+      let yamlPath: string;
+      if (!nameOrPath.includes("/") && !nameOrPath.endsWith(".yaml") && !nameOrPath.endsWith(".yml")) {
+        yamlPath = resolve(AGENTD_DIR, "agents", nameOrPath, "agent.yaml");
+        if (!existsSync(yamlPath)) {
+          console.error(`Agent YAML not found at ${yamlPath}`);
+          console.error(`Create it with: mkdir -p ~/.agentd/agents/${nameOrPath} && edit that file`);
+          process.exitCode = 1;
+          return;
+        }
+      } else {
+        yamlPath = resolve(nameOrPath);
+      }
       const res = await fetch(`${BASE_URL}/agents`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },

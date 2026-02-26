@@ -24,13 +24,15 @@ interface EventRow {
   data: string | null;
 }
 
-const MODEL_PRICING: Record<string, { input: number; output: number }> = {
-  "claude-sonnet-4-5-20250514": { input: 3, output: 15 },
-  "claude-sonnet-4-20250514": { input: 3, output: 15 },
-};
+const MODEL_PRICING: { prefix: string; input: number; output: number }[] = [
+  { prefix: "claude-sonnet-4-5", input: 3, output: 15 },
+  { prefix: "claude-sonnet-4", input: 3, output: 15 },
+  { prefix: "claude-haiku-4", input: 0.8, output: 4 },
+  { prefix: "claude-opus-4", input: 15, output: 75 },
+];
 
 export function costForModel(model: string, inputTokens: number, outputTokens: number): number {
-  const pricing = MODEL_PRICING[model];
+  const pricing = MODEL_PRICING.find((p) => model.startsWith(p.prefix));
   if (!pricing) return 0;
   return (inputTokens * pricing.input + outputTokens * pricing.output) / 1_000_000;
 }

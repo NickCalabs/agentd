@@ -36,7 +36,7 @@ export async function start(): Promise<void> {
   const serverPath = resolve(import.meta.dirname!, "server.ts");
   const child = spawn(
     process.execPath,
-    ["--experimental-strip-types", serverPath],
+    ["--disable-warning=ExperimentalWarning --experimental-strip-types", serverPath],
     {
       detached: true,
       stdio: "ignore",
@@ -110,14 +110,42 @@ export async function status(): Promise<void> {
   }
 
   // Process is alive — try /health
-  const url = `http://${DEFAULT_HOST}:${DEFAULT_PORT}/health`;
+  const base = `http://${DEFAULT_HOST}:${DEFAULT_PORT}`;
   try {
-    const res = await fetch(url);
+    const res = await fetch(`${base}/health`);
     const body = (await res.json()) as { status: string; version: string; uptime: number };
     console.log(`agentd is running`);
     console.log(`  pid:    ${pid}`);
     console.log(`  port:   ${DEFAULT_PORT}`);
     console.log(`  uptime: ${body.uptime}s`);
+
+    // Show discovered tools grouped by server
+    try {
+      const toolsRes = await fetch(`${base}/tools`);
+      const tools = (await toolsRes.json()) as { name: string; serverName: string; source?: string }[];
+      if (tools.length > 0) {
+        // Group by server
+        const byServer = new Map<string, { source: string; count: number }>();
+        for (const t of tools) {
+          const existing = byServer.get(t.serverName);
+          if (existing) {
+            existing.count++;
+          } else {
+            byServer.set(t.serverName, { source: t.source ?? "", count: 1 });
+          }
+        }
+        console.log(`  tools:  ${byServer.size} sources, ${tools.length} tools`);
+        for (const [server, info] of byServer) {
+          const src = info.source ? ` (${info.source})` : "";
+          const pad = " ".repeat(Math.max(0, 12 - server.length));
+          console.log(`          ${server}${pad}${info.count} tools${src}`);
+        }
+      } else {
+        console.log(`  tools:  none`);
+      }
+    } catch {
+      // Tools endpoint unavailable — not critical
+    }
   } catch {
     console.log(`agentd process is running (pid ${pid}) but /health is not responding`);
   }

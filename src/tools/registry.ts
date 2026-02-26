@@ -10,9 +10,17 @@ export interface RegisteredTool {
   source: string;
 }
 
+export interface LocalToolDef {
+  name: string;
+  description: string;
+  inputSchema: Record<string, unknown>;
+  handler: (args: Record<string, unknown>) => Promise<{ content: unknown[]; isError?: boolean }>;
+}
+
 interface ServerEntry {
-  client: McpClient;
+  client: McpClient | null;
   tools: Map<string, RegisteredTool>;
+  localHandlers?: Map<string, LocalToolDef["handler"]>;
   source: string;
 }
 
@@ -54,6 +62,27 @@ export async function registerServer(
   return [...tools.values()];
 }
 
+export function registerLocalServer(name: string, toolDefs: LocalToolDef[], source = "built-in"): RegisteredTool[] {
+  const tools = new Map<string, RegisteredTool>();
+  const handlers = new Map<string, LocalToolDef["handler"]>();
+
+  for (const t of toolDefs) {
+    const namespacedName = `${name}.${t.name}`;
+    tools.set(t.name, {
+      name: namespacedName,
+      serverName: name,
+      originalName: t.name,
+      description: t.description,
+      inputSchema: t.inputSchema,
+      source,
+    });
+    handlers.set(t.name, t.handler);
+  }
+
+  servers.set(name, { client: null, tools, localHandlers: handlers, source });
+  return [...tools.values()];
+}
+
 export function listTools(): RegisteredTool[] {
   const all: RegisteredTool[] = [];
   for (const entry of servers.values()) {
@@ -88,7 +117,14 @@ export async function callTool(
   args?: Record<string, unknown>,
 ): Promise<unknown> {
   const { server, originalName } = getServerForTool(toolName);
-  return server.client.callTool(originalName, args);
+
+  // Local handler (no MCP subprocess)
+  if (server.localHandlers) {
+    const handler = server.localHandlers.get(originalName);
+    if (handler) return handler(args ?? {});
+  }
+
+  return server.client!.callTool(originalName, args);
 }
 
 export async function disconnectAll(): Promise<void> {

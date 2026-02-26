@@ -6,7 +6,7 @@
     "agentd": "./bin/agentd"
   },
   "scripts": {
-    "start": "node --experimental-strip-types src/index.ts start",
+    "start": "node --disable-warning=ExperimentalWarning --experimental-strip-types src/index.ts start",
     "test": "vitest run"
   },
   "dependencies": {
