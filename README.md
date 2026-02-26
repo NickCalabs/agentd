@@ -282,7 +282,7 @@ agentd tools list
 curl -fsSL https://agentd.sh/install | sh
 
 # Or via npm
-npm install -g agentd
+npm install -g @agentd/cli
 
 # Start the daemon
 agentd start
