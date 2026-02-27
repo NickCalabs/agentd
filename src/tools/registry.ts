@@ -127,6 +127,14 @@ export async function callTool(
   return server.client!.callTool(originalName, args);
 }
 
+export async function disconnectServer(name: string): Promise<boolean> {
+  const entry = servers.get(name);
+  if (!entry) return false;
+  servers.delete(name);
+  await entry.client?.disconnect().catch(() => {});
+  return true;
+}
+
 export async function disconnectAll(): Promise<void> {
   const entries = [...servers.values()];
   servers.clear();

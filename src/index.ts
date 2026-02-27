@@ -1,6 +1,7 @@
 import { Command } from "commander";
-import { resolve } from "node:path";
-import { existsSync } from "node:fs";
+import { resolve, join } from "node:path";
+import { existsSync, mkdirSync, writeFileSync, unlinkSync } from "node:fs";
+import { createInterface } from "node:readline";
 import { start, stop, status } from "./daemon.ts";
 import { DEFAULT_PORT, DEFAULT_HOST, AGENTD_DIR } from "./config.ts";
 
@@ -304,22 +305,145 @@ const tools = program
 tools
   .command("list")
   .description("List available tools")
-  .action(async () => {
+  .option("--verbose", "Show tab-separated detail format")
+  .action(async (opts: { verbose?: boolean }) => {
     try {
       const res = await fetch(`${BASE_URL}/tools`);
-      const data = (await res.json()) as { name: string; serverName: string; source?: string; description?: string }[];
+      const data = (await res.json()) as { name: string; serverName: string; originalName: string; source?: string; description?: string }[];
       if (data.length === 0) {
         console.log("No tools available.");
         return;
       }
-      console.log("Tool\tServer\tSource\tDescription");
+
+      if (opts.verbose) {
+        console.log("Tool\tServer\tSource\tDescription");
+        for (const t of data) {
+          console.log(`${t.name}\t${t.serverName}\t${t.source ?? ""}\t${t.description ?? ""}`);
+        }
+        return;
+      }
+
+      // Grouped format
+      const byServer = new Map<string, { source: string; tools: string[] }>();
       for (const t of data) {
-        console.log(`${t.name}\t${t.serverName}\t${t.source ?? ""}\t${t.description ?? ""}`);
+        const entry = byServer.get(t.serverName);
+        if (entry) {
+          entry.tools.push(t.originalName);
+        } else {
+          byServer.set(t.serverName, { source: t.source ?? "", tools: [t.originalName] });
+        }
+      }
+
+      console.log(`Tools — ${data.length} tools from ${byServer.size} servers`);
+      for (const [server, info] of byServer) {
+        const src = info.source ? ` (${info.source})` : "";
+        console.log(`\n  ${server}${src} — ${info.tools.length} tools`);
+        // Wrap tool names at ~76 chars
+        let line = "    ";
+        for (let i = 0; i < info.tools.length; i++) {
+          const name = info.tools[i];
+          const sep = i === 0 ? "" : ", ";
+          if (line.length + sep.length + name.length > 76 && line.length > 4) {
+            console.log(line);
+            line = "    " + name;
+          } else {
+            line += sep + name;
+          }
+        }
+        if (line.length > 4) console.log(line);
       }
     } catch {
       console.error("Failed to reach daemon. Is the daemon running?");
       process.exitCode = 1;
     }
   });
+
+tools
+  .command("add <package>")
+  .description("Add an MCP tool server from an npm package")
+  .option("-y, --yes", "Skip confirmation prompt")
+  .action(async (pkg: string, opts: { yes?: boolean }) => {
+    // Derive server name: strip @scope/, strip server- prefix
+    let name = pkg.replace(/^@[^/]+\//, "").replace(/^server-/, "");
+
+    const command = "npx";
+    const args = ["-y", pkg];
+
+    if (!opts.yes) {
+      console.log(`Will run: ${command} ${args.join(" ")}`);
+      const answer = await promptUser("Proceed? [y/N] ");
+      if (answer.toLowerCase() !== "y" && answer.toLowerCase() !== "yes") {
+        console.log("Aborted.");
+        return;
+      }
+    }
+
+    // Write config file
+    const toolsDir = join(AGENTD_DIR, "tools");
+    mkdirSync(toolsDir, { recursive: true });
+    const configPath = join(toolsDir, `${name}.json`);
+    const config = { mcpServers: { [name]: { command, args } } };
+    writeFileSync(configPath, JSON.stringify(config, null, 2), "utf-8");
+
+    // Register with daemon
+    try {
+      const res = await fetch(`${BASE_URL}/tools/servers`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, config: { command, args }, confirmed: true }),
+      });
+      if (res.ok) {
+        const body = (await res.json()) as { name: string; tools: number; toolNames: string[] };
+        console.log(`Added "${body.name}" — ${body.tools} tools: ${body.toolNames.join(", ")}`);
+      } else {
+        // Registration failed — remove config file
+        unlinkSync(configPath);
+        const body = (await res.json()) as { error: string };
+        console.error(`Error: ${body.error}`);
+        process.exitCode = 1;
+      }
+    } catch {
+      // Daemon unreachable — remove config file
+      unlinkSync(configPath);
+      console.error("Failed to reach daemon. Is the daemon running?");
+      process.exitCode = 1;
+    }
+  });
+
+tools
+  .command("remove <name>")
+  .description("Remove an MCP tool server")
+  .action(async (name: string) => {
+    // Disconnect from daemon (lenient if daemon is down)
+    try {
+      const res = await fetch(`${BASE_URL}/tools/servers/${encodeURIComponent(name)}`, {
+        method: "DELETE",
+      });
+      if (res.status === 204) {
+        console.log(`Disconnected "${name}" from daemon.`);
+      } else if (res.status === 404) {
+        console.log(`Server "${name}" not found in daemon (may already be removed).`);
+      }
+    } catch {
+      console.log(`Daemon not reachable — skipping disconnect.`);
+    }
+
+    // Delete config file
+    const configPath = join(AGENTD_DIR, "tools", `${name}.json`);
+    if (existsSync(configPath)) {
+      unlinkSync(configPath);
+      console.log(`Removed config: ${configPath}`);
+    }
+  });
+
+function promptUser(question: string): Promise<string> {
+  const rl = createInterface({ input: process.stdin, output: process.stdout });
+  return new Promise((resolve) => {
+    rl.question(question, (answer) => {
+      rl.close();
+      resolve(answer);
+    });
+  });
+}
 
 program.parse();

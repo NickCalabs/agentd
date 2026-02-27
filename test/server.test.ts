@@ -70,9 +70,9 @@ describe("agentd daemon", () => {
 
     // Status
     const statusOut = run("status");
-    expect(statusOut).toMatch(/agentd is running/);
-    expect(statusOut).toMatch(/pid:/);
-    expect(statusOut).toMatch(/port:\s+4700/);
+    expect(statusOut).toMatch(/running/);
+    expect(statusOut).toMatch(/pid \d+/);
+    expect(statusOut).toMatch(/port: 4700/);
 
     // Stop
     const stopOut = run("stop");

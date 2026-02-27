@@ -112,9 +112,10 @@ describe("tool registry", () => {
     });
     expect(missingRes.status).toBe(400);
 
-    // 7. CLI tools list — output contains filesystem.
+    // 7. CLI tools list — output contains grouped format
     const listOut = run("tools", "list");
-    expect(listOut).toContain("filesystem.");
+    expect(listOut).toContain("filesystem");
+    expect(listOut).toContain("tools from");
 
     // 8. Stop daemon
     const stopOut = run("stop");

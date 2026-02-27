@@ -154,6 +154,31 @@ export async function stop(): Promise<void> {
   console.log(`agentd killed (pid ${pid})`);
 }
 
+function formatUptimeHuman(seconds: number): string {
+  if (seconds < 60) return `${seconds}s`;
+  const min = Math.floor(seconds / 60);
+  const sec = seconds % 60;
+  if (min < 60) return sec > 0 ? `${min}m ${sec}s` : `${min}m`;
+  const hr = Math.floor(min / 60);
+  const remMin = min % 60;
+  if (hr < 24) return remMin > 0 ? `${hr}h ${remMin}m` : `${hr}h`;
+  const days = Math.floor(hr / 24);
+  const remHr = hr % 24;
+  return remHr > 0 ? `${days}d ${remHr}h` : `${days}d`;
+}
+
+function formatRelativeTime(ms: number): string {
+  if (ms <= 0) return "now";
+  const sec = Math.floor(ms / 1000);
+  if (sec < 60) return `${sec}s`;
+  const min = Math.floor(sec / 60);
+  const remSec = sec % 60;
+  if (min < 60) return remSec > 0 ? `${min}m ${remSec}s` : `${min}m`;
+  const hr = Math.floor(min / 60);
+  const remMin = min % 60;
+  return remMin > 0 ? `${hr}h ${remMin}m` : `${hr}h`;
+}
+
 export async function status(): Promise<void> {
   const pid = readPid();
   if (pid === null) {
@@ -167,43 +192,43 @@ export async function status(): Promise<void> {
     return;
   }
 
-  // Process is alive — try /health
   const base = `http://${DEFAULT_HOST}:${DEFAULT_PORT}`;
   try {
-    const res = await fetch(`${base}/health`);
-    const body = (await res.json()) as { status: string; version: string; uptime: number };
-    console.log(`agentd is running`);
-    console.log(`  pid:    ${pid}`);
-    console.log(`  port:   ${DEFAULT_PORT}`);
-    console.log(`  uptime: ${body.uptime}s`);
+    const [healthRes, toolsRes, agentsRes] = await Promise.all([
+      fetch(`${base}/health`),
+      fetch(`${base}/tools`).catch(() => null),
+      fetch(`${base}/agents`).catch(() => null),
+    ]);
 
-    // Show discovered tools grouped by server
-    try {
-      const toolsRes = await fetch(`${base}/tools`);
-      const tools = (await toolsRes.json()) as { name: string; serverName: string; source?: string }[];
-      if (tools.length > 0) {
-        // Group by server
-        const byServer = new Map<string, { source: string; count: number }>();
-        for (const t of tools) {
-          const existing = byServer.get(t.serverName);
-          if (existing) {
-            existing.count++;
-          } else {
-            byServer.set(t.serverName, { source: t.source ?? "", count: 1 });
-          }
+    const health = (await healthRes.json()) as { version: string; uptime: number };
+    const tools = toolsRes ? ((await toolsRes.json()) as { serverName: string }[]) : [];
+    const agents = agentsRes ? ((await agentsRes.json()) as { name: string; next_run: string | null }[]) : [];
+
+    const serverCount = new Set(tools.map((t) => t.serverName)).size;
+    const scheduled = agents.filter((a) => a.next_run !== null);
+
+    console.log(`agentd v${health.version} — running (pid ${pid})`);
+    console.log(`  uptime: ${formatUptimeHuman(health.uptime)}`);
+    console.log(`  port: ${DEFAULT_PORT}`);
+    console.log(`  tools: ${tools.length} across ${serverCount} servers`);
+    console.log(`  agents: ${agents.length} registered (${scheduled.length} scheduled)`);
+
+    if (scheduled.length > 0) {
+      // Find next upcoming run
+      const now = Date.now();
+      let nextAgent = "";
+      let nextMs = Infinity;
+      for (const a of scheduled) {
+        const diff = new Date(a.next_run!).getTime() - now;
+        if (diff < nextMs) {
+          nextMs = diff;
+          nextAgent = a.name;
         }
-        console.log(`  tools:  ${byServer.size} sources, ${tools.length} tools`);
-        for (const [server, info] of byServer) {
-          const src = info.source ? ` (${info.source})` : "";
-          const pad = " ".repeat(Math.max(0, 12 - server.length));
-          console.log(`          ${server}${pad}${info.count} tools${src}`);
-        }
-      } else {
-        console.log(`  tools:  none`);
       }
-    } catch {
-      // Tools endpoint unavailable — not critical
+      console.log(`  next run: ${nextAgent} in ${formatRelativeTime(nextMs)}`);
     }
+
+    console.log(`  storage: ${AGENTD_DIR}/`);
   } catch {
     console.log(`agentd process is running (pid ${pid}) but /health is not responding`);
   }

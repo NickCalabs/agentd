@@ -3,7 +3,7 @@ import { serve } from "@hono/node-server";
 import { loadConfig } from "./config.ts";
 import { getDb } from "./state.ts";
 import { createAgent, getAgent, listAgents, removeAgent } from "./agents.ts";
-import { registerServer, registerLocalServer, listTools, callTool, disconnectAll } from "./tools/registry.ts";
+import { registerServer, registerLocalServer, listTools, callTool, disconnectServer, disconnectAll } from "./tools/registry.ts";
 import { listRuns, getRun } from "./traces.ts";
 import { filesystemServerConfig } from "./tools/builtin/filesystem.ts";
 import { shellTools } from "./tools/builtin/shell.ts";
@@ -107,6 +107,32 @@ app.post("/tools/call", async (c) => {
     const msg = err instanceof Error ? err.message : String(err);
     return c.json({ error: msg }, 400);
   }
+});
+
+app.post("/tools/servers", async (c) => {
+  const body = await c.req.json<{ name?: string; config?: { command: string; args?: string[] }; confirmed?: boolean }>();
+  if (!body.confirmed) {
+    return c.json({ error: "Missing 'confirmed: true' — use the CLI to add servers safely" }, 400);
+  }
+  if (!body.name || !body.config?.command) {
+    return c.json({ error: "Missing 'name' or 'config.command' in request body" }, 400);
+  }
+
+  try {
+    const tools = await registerServer(body.name, { command: body.config.command, args: body.config.args ?? [] }, "agentd-tools", { replace: true });
+    const toolNames = tools.map((t) => t.originalName);
+    return c.json({ name: body.name, tools: tools.length, toolNames }, 201);
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return c.json({ error: msg }, 500);
+  }
+});
+
+app.delete("/tools/servers/:name", async (c) => {
+  const name = c.req.param("name");
+  const removed = await disconnectServer(name);
+  if (!removed) return c.json({ error: `Server "${name}" not found` }, 404);
+  return c.body(null, 204);
 });
 
 export { app };
