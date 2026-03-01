@@ -35,7 +35,6 @@ program
   .option("--context <text>", "Context to pass to the agent")
   .action(async (agentName: string, opts: { context?: string }) => {
     try {
-      console.error(`Running ${agentName}...`);
       const res = await fetch(`${BASE_URL}/agents/${encodeURIComponent(agentName)}/run`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -47,8 +46,9 @@ program
         process.exitCode = 1;
         return;
       }
-      const result = (await res.json()) as { output: string };
-      console.log(result.output.trimEnd());
+      const result = (await res.json()) as { runId: string };
+      const shortId = result.runId.slice(0, 8);
+      console.log(`Started run ${shortId} — use \`agentd logs ${agentName}\` to follow progress`);
     } catch {
       console.error("Failed to reach daemon. Is the daemon running?");
       process.exitCode = 1;
@@ -132,6 +132,8 @@ program
           const dur = formatDuration(Number(d.duration_ms ?? 0));
           const errFlag = d.is_error ? " [error]" : "";
           console.log(`${prefix} Tool call: ${d.tool} (${dur})${errFlag}`);
+        } else if (e.type === "retry") {
+          console.log(`${prefix} Retry ${d.attempt}/${d.max_retries}: ${d.error} (waiting ${formatDuration(Number(d.delay_ms ?? 0))})`);
         } else if (e.type === "error") {
           console.log(`${prefix} Error: ${d.message}`);
         }

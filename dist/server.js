@@ -56,19 +56,18 @@ app.delete("/agents/:name", (c) => {
 app.post("/agents/:name/run", async (c) => {
     const name = c.req.param("name");
     const body = await c.req.json().catch(() => ({}));
-    try {
-        const { runAgent } = await import("./runner.js");
-        const result = await runAgent(name, "context" in body ? body.context : undefined);
-        return c.json(result);
-    }
-    catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        if (msg.includes("not found"))
-            return c.json({ error: msg }, 404);
-        if (msg.includes("API key"))
-            return c.json({ error: msg }, 500);
-        return c.json({ error: msg }, 500);
-    }
+    const agent = getAgent(name);
+    if (!agent)
+        return c.json({ error: `Agent "${name}" not found` }, 404);
+    const { createRun } = await import("./traces.js");
+    const runId = createRun(name);
+    // Fire-and-forget: run agent in background, don't block the response
+    import("./runner.js").then(({ runAgent }) => {
+        runAgent(name, runId, "context" in body ? body.context : undefined).catch(() => {
+            // errors are recorded in the run trace by runAgent itself
+        });
+    });
+    return c.json({ runId }, 202);
 });
 app.get("/agents/:name/runs", (c) => {
     const name = c.req.param("name");

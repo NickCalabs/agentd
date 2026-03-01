@@ -5,6 +5,34 @@ import { listTools, callTool } from "./tools/registry.ts";
 import type { RegisteredTool } from "./tools/registry.ts";
 import { createRun, completeRun, failRun, logEvent, costForModel } from "./traces.ts";
 
+const MAX_RETRIES = 3;
+const DEFAULT_RETRY_DELAY_MS = 60_000;
+
+function isTransientError(err: unknown): { transient: boolean; retryAfterMs?: number } {
+  if (err && typeof err === "object" && "status" in err) {
+    const status = (err as { status: number }).status;
+    if (status === 429) {
+      // Try to extract retry-after from headers
+      let retryAfterMs = DEFAULT_RETRY_DELAY_MS;
+      if ("headers" in err && err.headers && typeof err.headers === "object") {
+        const headers = err.headers as Record<string, string>;
+        const retryAfter = headers["retry-after"];
+        if (retryAfter) {
+          const seconds = Number(retryAfter);
+          if (!isNaN(seconds) && seconds > 0) {
+            retryAfterMs = seconds * 1000;
+          }
+        }
+      }
+      return { transient: true, retryAfterMs };
+    }
+    if (status === 500 || status === 502 || status === 503 || status === 529) {
+      return { transient: true, retryAfterMs: 5_000 };
+    }
+  }
+  return { transient: false };
+}
+
 export interface RunResult {
   runId: string;
   agentName: string;
@@ -26,17 +54,21 @@ export function fromAnthropicName(name: string): string {
 
 const MAX_ITERATIONS = 20;
 
-export async function runAgent(agentName: string, context?: string): Promise<RunResult> {
+export async function runAgent(agentName: string, runId: string, context?: string): Promise<RunResult> {
   const apiKey = loadApiKey();
   if (!apiKey) {
-    throw new Error(
-      "Anthropic API key not found. Set ANTHROPIC_API_KEY env var or add api_key to ~/.agentd/config.yaml",
-    );
+    const msg = "Anthropic API key not found. Set ANTHROPIC_API_KEY env var or add api_key to ~/.agentd/config.yaml";
+    logEvent(runId, "error", { message: msg });
+    failRun(runId, { error: msg, durationMs: 0 });
+    throw new Error(msg);
   }
 
   const agent = getAgent(agentName);
   if (!agent) {
-    throw new Error(`Agent "${agentName}" not found`);
+    const msg = `Agent "${agentName}" not found`;
+    logEvent(runId, "error", { message: msg });
+    failRun(runId, { error: msg, durationMs: 0 });
+    throw new Error(msg);
   }
 
   const allTools = listTools();
@@ -71,7 +103,6 @@ export async function runAgent(agentName: string, context?: string): Promise<Run
 
   const startedAt = new Date().toISOString();
   const start = Date.now();
-  const runId = createRun(agentName);
   let totalToolCalls = 0;
   let totalInputTokens = 0;
   let totalOutputTokens = 0;
@@ -81,13 +112,35 @@ export async function runAgent(agentName: string, context?: string): Promise<Run
     for (let i = 0; i < MAX_ITERATIONS; i++) {
       const llmStart = Date.now();
 
-      const response = await client.messages.create({
-        model: agent.model,
-        max_tokens: 4096,
-        system: agent.prompt,
-        messages,
-        tools: anthropicTools.length > 0 ? anthropicTools : undefined,
-      });
+      let response: Anthropic.Message;
+      for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+        try {
+          response = await client.messages.create({
+            model: agent.model,
+            max_tokens: 4096,
+            system: agent.prompt,
+            messages,
+            tools: anthropicTools.length > 0 ? anthropicTools : undefined,
+          });
+          break;
+        } catch (err: unknown) {
+          const { transient, retryAfterMs } = isTransientError(err);
+          if (!transient || attempt === MAX_RETRIES) {
+            throw err;
+          }
+          const delayMs = retryAfterMs ?? DEFAULT_RETRY_DELAY_MS;
+          const errMsg = err instanceof Error ? err.message : String(err);
+          logEvent(runId, "retry", {
+            attempt: attempt + 1,
+            max_retries: MAX_RETRIES,
+            error: errMsg,
+            delay_ms: delayMs,
+          });
+          await new Promise((resolve) => setTimeout(resolve, delayMs));
+        }
+      }
+      // response is guaranteed assigned — the loop either breaks or throws
+      response = response!;
 
       totalInputTokens += response.usage.input_tokens;
       totalOutputTokens += response.usage.output_tokens;

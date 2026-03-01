@@ -53,8 +53,10 @@ export function scheduleAgent(agentName: string, triggers: string[]): void {
     const task = cron.schedule(expr, async () => {
       try {
         console.log(`Cron fired for agent "${agentName}" (cron: ${expr})`);
+        const { createRun } = await import("./traces.ts");
         const { runAgent } = await import("./runner.ts");
-        await runAgent(agentName, `Scheduled run (cron: ${expr})`);
+        const runId = createRun(agentName);
+        await runAgent(agentName, runId, `Scheduled run (cron: ${expr})`);
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : String(err);
         console.error(`Scheduled run failed for "${agentName}": ${msg}`);

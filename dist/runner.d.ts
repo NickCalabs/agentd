@@ -10,4 +10,4 @@ export interface RunResult {
 }
 export declare function toAnthropicName(name: string): string;
 export declare function fromAnthropicName(name: string): string;
-export declare function runAgent(agentName: string, context?: string): Promise<RunResult>;
+export declare function runAgent(agentName: string, runId: string, context?: string): Promise<RunResult>;
