@@ -78,6 +78,23 @@ describe("security hardening", () => {
     expect(text).toBeDefined();
   });
 
+  it("shell.run_command does not allow shell injection via program name", { timeout: 10_000 }, async () => {
+    // With execFileSync, "echo; rm -rf /" is passed as the program name,
+    // so the OS looks for a binary literally named "echo; rm -rf /" and fails.
+    const result = await callTool("shell.run_command", { program: "echo; rm -rf /", args: [] });
+    const text = result.content?.[0]?.text ?? "";
+    expect(result.isError).toBe(true);
+    expect(text).toMatch(/ENOENT|not found|spawn/i);
+  });
+
+  it("shell.run_command does not interpret shell metacharacters in args", { timeout: 10_000 }, async () => {
+    // With execFileSync, shell metacharacters in args are passed literally.
+    // "$(whoami)" should be printed as-is, not expanded.
+    const result = await callTool("shell.run_command", { program: "echo", args: ["$(whoami)"] });
+    const text = result.content?.[0]?.text ?? "";
+    expect(text.trim()).toBe("$(whoami)");
+  });
+
   it("shell.which does not allow shell injection", { timeout: 10_000 }, async () => {
     // With execFileSync, "node; echo INJECTED" is passed as a single argument to which,
     // so it looks for a command literally named "node; echo INJECTED" and fails.

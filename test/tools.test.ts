@@ -82,6 +82,7 @@ describe("tool registry", () => {
     expect(serverNames.has("git")).toBe(true);
     expect(tools.some((t) => t.name === "filesystem.list_directory")).toBe(true);
     expect(tools.some((t) => t.name === "shell.run_command")).toBe(true);
+    expect(tools.some((t) => t.name === "shell.run_shell")).toBe(true);
     expect(tools.some((t) => t.name === "git.status")).toBe(true);
 
     // 4. POST /tools/call — call list_directory on /tmp
