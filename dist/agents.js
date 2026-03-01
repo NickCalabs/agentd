@@ -13,7 +13,7 @@ function rowToAgent(row) {
         next_run: row.next_run ?? null,
     };
 }
-const MODEL_PATTERN = /^claude-/;
+const MODEL_PATTERN = /^(claude-|ollama\/)/;
 function validateStringArray(value, field) {
     if (value === undefined || value === null)
         return [];
@@ -67,7 +67,7 @@ export function createAgent(yamlPath) {
         throw new Error(`"description" must be a string, got ${typeof description}`);
     }
     if (!MODEL_PATTERN.test(model)) {
-        throw new Error(`Unknown model "${model}". Model must start with "claude-" (e.g. "claude-sonnet-4-20250514")`);
+        throw new Error(`Unknown model "${model}". Model must start with "claude-" or "ollama/" (e.g. "claude-sonnet-4-20250514", "ollama/llama3.3:70b")`);
     }
     const tools = validateStringArray(doc.tools, "tools");
     const triggers = validateStringArray(doc.triggers, "triggers");

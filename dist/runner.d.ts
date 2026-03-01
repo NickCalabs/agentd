@@ -1,3 +1,11 @@
+type ModelProvider = {
+    type: "anthropic";
+    model: string;
+} | {
+    type: "ollama";
+    model: string;
+};
+export declare function parseModelProvider(model: string): ModelProvider;
 export interface RunResult {
     runId: string;
     agentName: string;
@@ -11,3 +19,4 @@ export interface RunResult {
 export declare function toAnthropicName(name: string): string;
 export declare function fromAnthropicName(name: string): string;
 export declare function runAgent(agentName: string, runId: string, context?: string): Promise<RunResult>;
+export {};

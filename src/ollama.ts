@@ -2,7 +2,8 @@ import type { RegisteredTool } from "./tools/registry.ts";
 import { callTool } from "./tools/registry.ts";
 import { logEvent } from "./traces.ts";
 
-const OLLAMA_BASE_URL = "http://localhost:11434/v1";
+const OLLAMA_HOST = process.env.OLLAMA_HOST || "http://localhost:11434";
+const OLLAMA_BASE_URL = `${OLLAMA_HOST}/v1`;
 const OLLAMA_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
 
 // OpenAI-compatible types (minimal subset needed)
@@ -126,12 +127,12 @@ export async function runOllamaLoop(opts: {
       response = (await res.json()) as OllamaChatResponse;
     } catch (err: unknown) {
       if (err instanceof TypeError && (err as Error).message.includes("fetch")) {
-        throw new Error("Cannot reach Ollama at localhost:11434 — is it running?");
+        throw new Error(`Cannot reach Ollama at ${OLLAMA_HOST} — is it running?`);
       }
       // Connection refused / ECONNREFUSED
       const msg = err instanceof Error ? err.message : String(err);
       if (msg.includes("ECONNREFUSED") || msg.includes("connect")) {
-        throw new Error("Cannot reach Ollama at localhost:11434 — is it running?");
+        throw new Error(`Cannot reach Ollama at ${OLLAMA_HOST} — is it running?`);
       }
       throw err;
     }
