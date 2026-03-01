@@ -1,9 +1,11 @@
 import { describe, it, expect, afterAll, beforeAll } from "vitest";
 import { execFileSync } from "node:child_process";
 import { writeFileSync, mkdirSync, unlinkSync } from "node:fs";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { DEFAULT_PORT, DEFAULT_HOST } from "../src/config.ts";
+
+const OLLAMA_FIXTURE = resolve("test/fixtures/ollama-agent.yaml");
 
 const CLI = [process.execPath, "--experimental-strip-types", "src/index.ts"];
 const BASE_URL = `http://${DEFAULT_HOST}:${DEFAULT_PORT}`;
@@ -120,6 +122,55 @@ tools: []
     expect(res.status).toBe(404);
   });
 
+  it("agent with unknown model prefix fails with clear error in trace", async () => {
+    const agentDir = join(tmpdir(), "agentd-test-unknown-prefix");
+    mkdirSync(agentDir, { recursive: true });
+    const agentPath = join(agentDir, "unknown-prefix-agent.yaml");
+    writeFileSync(
+      agentPath,
+      `name: unknown-prefix-agent
+model: ollama/some-model
+prompt: Say hello.
+tools: []
+`,
+    );
+
+    try {
+      await fetch(`${BASE_URL}/agents/unknown-prefix-agent`, { method: "DELETE" });
+
+      const addRes = await fetch(`${BASE_URL}/agents`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ yamlPath: agentPath }),
+      });
+      expect(addRes.status).toBe(201);
+
+      const runRes = await fetch(`${BASE_URL}/agents/unknown-prefix-agent/run`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      expect(runRes.status).toBe(202);
+      const { runId } = (await runRes.json()) as { runId: string };
+
+      // Ollama likely not running in test — should fail with connection error, not crash
+      const completedRun = await waitForRunStatus(runId, ["error", "completed"], 15_000);
+      expect(completedRun).not.toBeNull();
+      expect(completedRun!.status).toBe("error");
+      expect(typeof completedRun!.error).toBe("string");
+
+      // Daemon should still be healthy
+      const healthRes = await fetch(`${BASE_URL}/health`);
+      expect(healthRes.status).toBe(200);
+    } finally {
+      try {
+        unlinkSync(agentPath);
+      } catch {
+        // ignore
+      }
+    }
+  }, 20_000);
+
   it("run with invalid model fails with clear error in trace, not a daemon crash", async () => {
     const agentDir = join(tmpdir(), "agentd-test-bad-model");
     mkdirSync(agentDir, { recursive: true });
@@ -170,4 +221,50 @@ tools: []
       }
     }
   }, 20_000);
+
+  // Only run when OLLAMA_AVAILABLE=1 is set — requires a running Ollama instance
+  const describeOllama = process.env.OLLAMA_AVAILABLE ? describe : describe.skip;
+
+  describeOllama("ollama integration", () => {
+    it("agent with ollama model can execute a prompt with filesystem tool call", async () => {
+      // Write a test file for the agent to read
+      const testFilePath = "/tmp/agentd-ollama-test.txt";
+      writeFileSync(testFilePath, "Hello from the Ollama integration test!");
+
+      try {
+        await fetch(`${BASE_URL}/agents/ollama-test-agent`, { method: "DELETE" });
+
+        const addRes = await fetch(`${BASE_URL}/agents`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ yamlPath: OLLAMA_FIXTURE }),
+        });
+        expect(addRes.status).toBe(201);
+
+        const runRes = await fetch(`${BASE_URL}/agents/ollama-test-agent/run`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({}),
+        });
+        expect(runRes.status).toBe(202);
+        const { runId } = (await runRes.json()) as { runId: string };
+
+        // Wait longer for Ollama — local models are slow
+        const completedRun = await waitForRunStatus(runId, ["error", "completed"], 120_000);
+        expect(completedRun).not.toBeNull();
+        expect(completedRun!.status).toBe("completed");
+        expect(typeof completedRun!.output).toBe("string");
+        expect((completedRun!.output as string).length).toBeGreaterThan(0);
+
+        // Cost should be $0 for local models
+        expect(completedRun!.cost_usd).toBe(0);
+      } finally {
+        try {
+          unlinkSync(testFilePath);
+        } catch {
+          // ignore
+        }
+      }
+    }, 180_000);
+  });
 });

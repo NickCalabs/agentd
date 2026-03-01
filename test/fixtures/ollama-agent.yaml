@@ -1,0 +1,8 @@
+name: ollama-test-agent
+model: ollama/llama3.3:70b
+description: A test agent using Ollama
+prompt: You are a test agent. Read the file /tmp/agentd-ollama-test.txt and tell me what it says.
+tools:
+  - filesystem
+triggers:
+  - manual
