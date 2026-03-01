@@ -4,7 +4,7 @@ import { loadConfig } from "./config.js";
 import { getDb } from "./state.js";
 import { createAgent, getAgent, listAgents, removeAgent } from "./agents.js";
 import { registerServer, registerLocalServer, listTools, callTool, disconnectServer, disconnectAll } from "./tools/registry.js";
-import { listRuns, getRun } from "./traces.js";
+import { createRun, listRuns, getRun, failRun } from "./traces.js";
 import { filesystemServerConfig } from "./tools/builtin/filesystem.js";
 import { shellTools } from "./tools/builtin/shell.js";
 import { gitTools } from "./tools/builtin/git.js";
@@ -59,13 +59,15 @@ app.post("/agents/:name/run", async (c) => {
     const agent = getAgent(name);
     if (!agent)
         return c.json({ error: `Agent "${name}" not found` }, 404);
-    const { createRun } = await import("./traces.js");
     const runId = createRun(name);
-    // Fire-and-forget: run agent in background, don't block the response
-    import("./runner.js").then(({ runAgent }) => {
-        runAgent(name, runId, "context" in body ? body.context : undefined).catch(() => {
-            // errors are recorded in the run trace by runAgent itself
-        });
+    // Fire-and-forget: run agent in background, don't block the response.
+    // Dynamic import keeps runner.ts (+ Anthropic SDK) out of the startup path.
+    import("./runner.js")
+        .then(({ runAgent }) => runAgent(name, runId, "context" in body ? body.context : undefined))
+        .catch((err) => {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.error(`Agent run ${runId} (${name}) failed: ${msg}`);
+        failRun(runId, { error: msg, durationMs: 0 });
     });
     return c.json({ runId }, 202);
 });

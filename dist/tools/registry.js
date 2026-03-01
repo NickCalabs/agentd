@@ -4,7 +4,10 @@ export async function registerServer(name, config, source = "manual", opts) {
     const existing = servers.get(name);
     if (existing) {
         if (opts?.replace) {
-            await existing.client?.disconnect().catch(() => { });
+            await existing.client?.disconnect().catch((err) => {
+                const msg = err instanceof Error ? err.message : String(err);
+                console.warn(`Failed to disconnect MCP server "${name}" during replace: ${msg}`);
+            });
         }
         else {
             console.warn(`MCP server "${name}" already registered (source: ${existing.source}), skipping`);
@@ -84,11 +87,20 @@ export async function disconnectServer(name) {
     if (!entry)
         return false;
     servers.delete(name);
-    await entry.client?.disconnect().catch(() => { });
+    await entry.client?.disconnect().catch((err) => {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.warn(`Failed to disconnect MCP server "${name}": ${msg}`);
+    });
     return true;
 }
 export async function disconnectAll() {
     const entries = [...servers.values()];
     servers.clear();
-    await Promise.allSettled(entries.map((e) => e.client?.disconnect()));
+    const results = await Promise.allSettled(entries.map((e) => e.client?.disconnect()));
+    for (const r of results) {
+        if (r.status === "rejected") {
+            const msg = r.reason instanceof Error ? r.reason.message : String(r.reason);
+            console.warn(`MCP server disconnect failed during shutdown: ${msg}`);
+        }
+    }
 }

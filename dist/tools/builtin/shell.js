@@ -15,11 +15,46 @@ function isBlockedEnvVar(name) {
 export const shellTools = [
     {
         name: "run_command",
-        description: "Execute a shell command and return its output",
+        description: "Execute a program directly without shell interpretation. Does not support shell features like pipes, redirects, or globbing. For those, use run_shell.",
         inputSchema: {
             type: "object",
             properties: {
-                command: { type: "string", description: "The shell command to execute" },
+                program: { type: "string", description: "Program to execute (e.g. 'ls', 'git', 'python3')" },
+                args: {
+                    type: "array",
+                    items: { type: "string" },
+                    description: "Arguments to pass to the program",
+                },
+                cwd: { type: "string", description: "Working directory (optional)" },
+            },
+            required: ["program"],
+        },
+        handler: async (args) => {
+            const program = String(args.program);
+            const cmdArgs = Array.isArray(args.args) ? args.args.map(String) : [];
+            const cwd = args.cwd ? String(args.cwd) : undefined;
+            try {
+                const output = execFileSync(program, cmdArgs, {
+                    cwd,
+                    timeout: 30_000,
+                    encoding: "utf-8",
+                    maxBuffer: 1024 * 1024,
+                });
+                return { content: [{ type: "text", text: output }] };
+            }
+            catch (err) {
+                const msg = err instanceof Error ? err.message : String(err);
+                return { content: [{ type: "text", text: msg }], isError: true };
+            }
+        },
+    },
+    {
+        name: "run_shell",
+        description: "Execute a shell command string. Supports pipes, redirects, globbing, and other shell features. Prefer run_command when shell features are not needed.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                command: { type: "string", description: "Shell command to execute" },
                 cwd: { type: "string", description: "Working directory (optional)" },
             },
             required: ["command"],

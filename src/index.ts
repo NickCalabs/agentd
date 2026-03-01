@@ -242,6 +242,14 @@ agents
   });
 
 agents
+  .command("init")
+  .description("Set up starter agents interactively")
+  .action(async () => {
+    const { runInit } = await import("./init.ts");
+    await runInit();
+  });
+
+agents
   .command("add <name-or-path>")
   .description("Register an agent by name or YAML file path")
   .action(async (nameOrPath: string) => {

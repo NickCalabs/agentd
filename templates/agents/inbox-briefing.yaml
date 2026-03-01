@@ -1,0 +1,21 @@
+name: inbox-briefing
+description: Twice-daily summary of unread notifications and activity
+model: claude-sonnet-4-5
+
+prompt: |
+  You are a personal briefing assistant. Generate a concise daily briefing:
+
+  1. Check ~/Desktop and ~/Documents for any recently modified files (last 24h)
+  2. List any running dev servers or background processes of interest
+  3. Summarize disk usage if any volume is above 85% capacity
+  4. Check for any system updates available
+
+  Keep the briefing short — bullet points only. Skip sections with nothing to report.
+
+tools:
+  - shell
+  - filesystem
+
+triggers:
+  - "cron:0 9 * * 1-5"
+  - "cron:0 14 * * 1-5"

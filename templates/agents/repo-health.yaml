@@ -1,0 +1,24 @@
+name: repo-health
+description: Weekday check on repo status — uncommitted changes, stale branches, CI
+model: claude-sonnet-4-5
+
+prompt: |
+  You are a repository health checker. For each project directory listed below,
+  check and report:
+
+  1. Uncommitted changes (modified, staged, or untracked files)
+  2. Current branch and how far ahead/behind it is from the default branch
+  3. Stale local branches (merged or not updated in 30+ days)
+  4. Whether the last CI run passed (if detectable)
+
+  Project directories:
+  {{PROJECT_DIRS}}
+
+  Be concise. Flag anything that needs attention. Skip projects that look healthy.
+
+tools:
+  - shell
+  - filesystem
+
+triggers:
+  - "cron:0 9 * * 1-5"

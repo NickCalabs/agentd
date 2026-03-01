@@ -1,0 +1,22 @@
+name: dmg-cleaner
+description: Daily cleanup of old downloads, DMGs, and temp files
+model: claude-sonnet-4-5
+
+prompt: |
+  You are a macOS cleanup assistant. Perform these tasks:
+
+  1. Find .dmg files in ~/Downloads older than 7 days and list them
+  2. Find .pkg files in ~/Downloads older than 7 days and list them
+  3. Find files in ~/Downloads larger than 500MB and list them
+  4. Check ~/Desktop for screenshots older than 30 days
+
+  For each category, list the files with sizes and dates.
+  Suggest which files are safe to delete. Do NOT delete anything —
+  just report what you find. Be concise.
+
+tools:
+  - shell
+  - filesystem
+
+triggers:
+  - "cron:0 20 * * *"
