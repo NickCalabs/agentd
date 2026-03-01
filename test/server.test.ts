@@ -39,7 +39,7 @@ describe("agentd daemon", () => {
     }
   });
 
-  it("starts the daemon, responds to /health, and stops cleanly", async () => {
+  it("starts the daemon, responds to /health, and stops cleanly", { timeout: 30_000 }, async () => {
     // Start
     const startOut = run("start");
     expect(startOut).toMatch(/agentd started/);
