@@ -55,9 +55,15 @@ export async function createMcpClient(options: McpClientOptions): Promise<McpCli
 
     async disconnect(): Promise<void> {
       try {
-        await client.close();
-      } catch {
-        // Process may already be gone during SIGTERM
+        await Promise.race([
+          client.close(),
+          new Promise<void>((_, reject) =>
+            setTimeout(() => reject(new Error("MCP client disconnect timed out after 5s")), 5_000),
+          ),
+        ]);
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.warn(`MCP client disconnect failed: ${msg}`);
       }
     },
   };
