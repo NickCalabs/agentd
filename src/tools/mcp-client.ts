@@ -1,5 +1,6 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+import { filterEnv } from "../env.ts";
 
 export interface McpClientOptions {
   command: string;
@@ -26,10 +27,11 @@ export interface McpClient {
 }
 
 export async function createMcpClient(options: McpClientOptions): Promise<McpClient> {
+  const safeEnv = filterEnv();
   const transport = new StdioClientTransport({
     command: options.command,
     args: options.args,
-    env: options.env ? { ...process.env, ...options.env } as Record<string, string> : undefined,
+    env: options.env ? { ...safeEnv, ...options.env } : safeEnv,
   });
 
   const client = new Client({ name: "agentd", version: "0.1.0" });

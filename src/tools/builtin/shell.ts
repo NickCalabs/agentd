@@ -1,20 +1,6 @@
 import { execSync, execFileSync } from "node:child_process";
 import type { LocalToolDef } from "../registry.ts";
-
-const ENV_BLOCKLIST_EXACT = new Set([
-  "ANTHROPIC_API_KEY",
-  "AWS_SECRET_ACCESS_KEY",
-  "AWS_SESSION_TOKEN",
-  "OPENAI_API_KEY",
-]);
-
-const ENV_BLOCKLIST_SUFFIXES = ["_TOKEN", "_SECRET", "_PASSWORD"];
-
-function isBlockedEnvVar(name: string): boolean {
-  if (ENV_BLOCKLIST_EXACT.has(name)) return true;
-  const upper = name.toUpperCase();
-  return ENV_BLOCKLIST_SUFFIXES.some((suffix) => upper.endsWith(suffix));
-}
+import { isBlockedEnvVar } from "../../env.ts";
 
 export const shellTools: LocalToolDef[] = [
   {
